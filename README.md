@@ -6,6 +6,11 @@
 基于 **OneBot v11** 协议，可用 NapCatQQ、Lagrange.Core、LLOneBot、go-cqhttp 等接入。
 插件完全自包含，只用 Node 内置模块，**不需要额外安装任何 npm 依赖**。
 
+仓库：<https://github.com/luchengfj/qq-bot>
+
+安装：把本目录挂到 Harness 的插件目录，或在 `cordis.patch.yml` 里
+`insert` 一行 `{id: qq-bot, name: '@local/qq-bot'}` 指向本目录。
+
 ---
 
 ## 工作原理
