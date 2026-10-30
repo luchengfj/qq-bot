@@ -32,9 +32,9 @@ const routes = makeBridgeRoutes({
   cfg, bridge, setup: null, log: () => {}, logRing: createLogRing(10), stats: createStats(), memory,
 });
 
-check('memory endpoints added', routes.length === 14, routes.length);
+check('memory endpoints added', routes.length === 16, routes.length);
 const paths = routes.map((r) => r.path);
-for (const p of ['/api/qq-bot/memory', '/api/qq-bot/memory-facts', '/api/qq-bot/memory-forget', '/api/qq-bot/memory-save']) {
+for (const p of ['/api/qq-bot/memory', '/api/qq-bot/memory-facts', '/api/qq-bot/memory-forget', '/api/qq-bot/memory-save', '/api/qq-bot/memory-history', '/api/qq-bot/memory-newtopic']) {
   check(`route ${p}`, paths.indexOf(p) >= 0, paths);
 }
 
@@ -104,6 +104,33 @@ check('missing key rejected', bad.status === 400 && bad.body.ok === false, bad.b
 // /memory-save without a file still succeeds (no-op)
 const sv = await post('/api/qq-bot/memory-save', {});
 check('save without file is ok', sv.body.ok === true, sv.body);
+
+// ------------------------------------------------- conversation history API
+memory.addTurn('private:42', '第一个问题', '第一个回答');
+memory.addTurn('private:42', '第二个问题', '第二个回答');
+
+const h1 = await get('/api/qq-bot/memory-history?key=private%3A42');
+check('history returns turns', h1.body.ok === true && h1.body.turns.length === 2, h1.body);
+check('history content', h1.body.turns[1].user === '第二个问题', h1.body.turns);
+
+const h2 = await get('/api/qq-bot/memory-history?key=private%3A99');
+check('history of unknown key is empty', h2.body.ok === true && h2.body.turns.length === 0, h2.body);
+
+const h3 = await get('/api/qq-bot/memory-history');
+check('history without key is empty', h3.body.ok === true && h3.body.turns.length === 0, h3.body);
+
+// /memory-newtopic clears the window but keeps the long-term facts
+memory.remember('private:42', '我叫小明');
+const nt = await post('/api/qq-bot/memory-newtopic', { key: 'private:42' });
+check('newtopic resets', nt.body.ok === true && nt.body.reset === true, nt.body);
+check('newtopic cleared turns', memory.history('private:42').length === 0, memory.history('private:42'));
+check('newtopic kept facts', memory.facts('private:42').length === 1, memory.facts('private:42'));
+
+const nt2 = await post('/api/qq-bot/memory-newtopic', { key: 'private:42' });
+check('newtopic again is a no-op', nt2.body.ok === true && nt2.body.reset === false, nt2.body);
+
+const nt3 = await post('/api/qq-bot/memory-newtopic', {});
+check('newtopic without key rejected', nt3.status === 400 && nt3.body.ok === false, nt3.body);
 
 server.close();
 console.log(`\n${fail === 0 ? 'ALL_MEMORY_BRIDGE_PASS' : 'MEMORY_BRIDGE_FAILURES'} ${pass}/${pass + fail}`);

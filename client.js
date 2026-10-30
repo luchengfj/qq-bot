@@ -263,6 +263,15 @@ window.__ModuleLoader__.load({
         }
       };
 
+      const refreshOpen = async (key) => {
+        try {
+          const data = await call(`/memory-facts?key=${encodeURIComponent(key)}`);
+          setFacts(data.facts || []);
+        } catch (err) {
+          setFacts([]);
+        }
+      };
+
       return jsxs(Card, {
         title: '长期记忆',
         extra: jsxs('div', { className: 'qq-row', key: 'x' }, [
@@ -280,6 +289,10 @@ window.__ModuleLoader__.load({
         jsxs('div', { className: 'qq-row', key: 'stats' }, [
           jsx(Pill, { key: 'on', tone: mem.enabled ? 'ok' : 'warn' }, mem.enabled ? '已启用' : '已关闭'),
           jsx('span', { className: 'qq-muted', key: 'n' }, `记住了 ${mem.senders} 个会话 / ${mem.facts} 条信息`),
+          mem.maxHistory > 0
+            ? jsx('span', { className: 'qq-muted', key: 'h' },
+              `上下文 ${mem.turns || 0} 轮（每会话最多 ${mem.maxHistory}，静默 ${Math.round((mem.historyTtlMs || 0) / 60000)} 分钟重置）`)
+            : null,
           mem.file ? jsx('span', { className: 'qq-muted', key: 'f' }, `文件：${mem.file}`)
             : jsx('span', { className: 'qq-muted', key: 'nf' }, '未配置持久化文件（重启后丢失）'),
           mem.lastError ? jsx('span', { className: 'qq-error', key: 'e' }, mem.lastError) : null,
@@ -295,6 +308,7 @@ window.__ModuleLoader__.load({
                 }, [
                   jsx('span', { className: 'qq-mem-key', key: 'k' }, row.key),
                   jsx('span', { className: 'qq-muted', key: 'c' }, `${row.facts} 条`),
+                  row.turns > 0 ? jsx('span', { className: 'qq-muted', key: 't' }, `${row.turns} 轮上下文`) : null,
                   jsx('span', { className: 'qq-muted', key: 'p' }, row.preview),
                   jsx('span', { className: 'qq-mem-caret', key: 'x' }, open === row.key ? '▾' : '▸'),
                 ]),
@@ -313,15 +327,21 @@ window.__ModuleLoader__.load({
                                   onClick: () => state.action('memForget', { key: row.key, fact: f }).then(() => toggle(row.key).then(() => toggle(row.key))),
                                 }, '删除'),
                               ]))),
-                      jsx(Button, {
-                        key: 'del', ghost: true, className: 'qq-btn-danger',
-                        onClick: () => state.action('memForget', { key: row.key }).then(() => { setOpen(''); setFacts([]); }),
-                      }, '清除这个会话的记忆'),
+                      jsxs('div', { className: 'qq-row', key: 'acts' }, [
+                        jsx(Button, {
+                          key: 'nt', ghost: true, disabled: state.busy === 'memNewTopic',
+                          onClick: () => state.action('memNewTopic', { key: row.key }).then(() => refreshOpen(row.key)),
+                        }, '换个话题（清上下文）'),
+                        jsx(Button, {
+                          key: 'del', ghost: true, className: 'qq-btn-danger',
+                          onClick: () => state.action('memForget', { key: row.key }).then(() => { setOpen(''); setFacts([]); }),
+                        }, '清除这个会话的记忆'),
+                      ]),
                     ])
                   : null,
               ]))),
         jsx('p', { className: 'qq-muted', key: 'tip' },
-          '私聊与群聊的记忆互相隔离。修改 cordis.patch.yml 的 memory.file 可以把记忆写到磁盘，重启后仍然记得。'),
+          '私聊与群聊的记忆互相隔离。QQ 里可发 /help /status /new /memory /forget；修改 cordis.patch.yml 的 memory.file 可以把记忆写到磁盘，重启后仍然记得。'),
       ]);
     }
 
@@ -400,6 +420,10 @@ window.__ModuleLoader__.load({
           } else if (name === 'memClearAll') {
             await post('/memory-forget', { scope: 'all' });
             setNotice('已清空全部记忆。');
+            refresh();
+          } else if (name === 'memNewTopic') {
+            await post('/memory-newtopic', payload);
+            setNotice('已清空该会话的对话上下文（长期记忆保留）。');
             refresh();
           }
         } catch (err) {

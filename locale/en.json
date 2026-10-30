@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "QQ Bot Channel",
-    "description": "OneBot v11 QQ bot channel. Receives QQ messages and images, answers questions through an OpenAI-compatible chat/vision endpoint, and keeps long-term per-user memory (private/group isolated). Ships a DSH panel for status, QR-code login, one-click wiring, test messages, memory management and logs, plus a standalone /setup console."
+    "description": "OneBot v11 QQ bot channel. Receives QQ messages and images and answers through an OpenAI-compatible chat/vision endpoint. Keeps long-term per-user memory plus a short-term conversation window (so follow-ups like \"and that one?\" work; it resets after silence), splits long replies into several messages instead of truncating, and answers /help, /status, /new, /memory, /forget. Ships a DSH panel for status, QR-code login, one-click wiring, test messages, memory management and logs, plus a standalone /setup console."
   }
 }
