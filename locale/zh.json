@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "QQ 机器人通道",
+    "description": "基于 OneBot v11 的 QQ 机器人通道插件。接收 QQ 消息与图片，通过可配置的 OpenAI 兼容视觉/对话接口回答问题。内置 /setup 控制台，支持 NapCat 扫码登录与一键接入。"
+  }
+}

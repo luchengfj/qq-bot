@@ -1,0 +1,68 @@
+# QQ 机器人通道插件配置
+#
+# 这是 Cordis patch 层：安装后会在 profile 中插入一个插件行，并把下面的
+# `config` 作为该行的配置传给 index.js 的 apply(ctx, config)。
+# 修改这里的配置后，需要重新启用插件（或重启 DSH）才会生效：
+#   插件管理里把 qq-bot 关闭再打开，或直接重启 Harness。
+#
+# ★ 最简接入流程（扫码登录，无需手改 NapCat 配置）★
+#   1. 启动 NapCat（已安装 QQNT），记下它终端里打印的 WebUI token
+#   2. 把该 token 填到下面的 napcat.webuiToken
+#   3. 关闭再启用本插件，浏览器打开 http://127.0.0.1:6700/setup
+#   4. 点「获取二维码」用手机 QQ 扫码 → 点「一键接入」
+#
+# 手动接入方式：NapCatQQ / Lagrange.Core / LLOneBot 配置「反向 WebSocket」客户端
+#   地址  ws://127.0.0.1:6700/onebot
+#   （如果设置了 accessToken，加上 ?access_token=你的token 或 Authorization: Bearer）
+#
+- insert:
+    - id: qq-bot
+      name: '@local/qq-bot'
+      config:
+        # ---- OneBot 连接 ----
+        host: '0.0.0.0'          # 监听地址；只在本机用可改 '127.0.0.1'
+        port: 6700               # 监听端口
+        path: /onebot            # WebSocket / HTTP POST 路径
+        accessToken: ''          # 可选：接入令牌（留空则不校验）
+        secret: ''               # 可选：HTTP POST 上报签名密钥（HMAC-SHA1）
+        replyVia: ws             # 'ws' 通过同一 WebSocket 回复；'http' 走 httpApiBase
+        httpApiBase: ''          # replyVia=http 或 WS 不可用时的 OneBot HTTP API 地址，如 http://127.0.0.1:3000
+        httpApiToken: ''         # HTTP API 的 Bearer token（可选）
+        replyAtSender: true      # 群消息回复时是否 @发送者
+        maxImageBytes: 8388608   # 单张图片下载上限（默认 8MB）
+
+        # ---- NapCat 扫码登录 / 一键接入（内置控制台）----
+        # 启动插件后打开 http://127.0.0.1:6700/setup 即可扫码登录并一键接入。
+        napcat:
+          enabled: true              # false 则关闭内置控制台的 NapCat 联动
+          baseUrl: 'http://127.0.0.1:6099'  # NapCat WebUI 地址
+          webuiToken: ''             # ★ NapCat WebUI 登录令牌（NapCat 启动日志/终端里显示的那串 token）
+          reverseHost: '127.0.0.1'   # 让 NapCat 连回本插件时用的地址
+          reversePort: 6700          # 让 NapCat 连回本插件时用的端口
+          timeoutMs: 15000
+
+        # ---- 触发规则 ----
+        trigger:
+          privateAlways: true    # 私聊消息是否全部响应
+          groupRequiresAt: true  # 群消息是否需要 @机器人 或 前缀才响应
+          prefix: ''             # 可选命令前缀，如 '/ai '；命中后从提示词中去除
+
+        # ---- 白名单 / 黑名单（留空=不限制）----
+        allow:
+          groups: []             # 只响应这些群号，如 ['123456']；空=所有群
+          users: []              # 只响应这些 QQ 号；空=所有人
+          denyUsers: []          # 屏蔽这些 QQ 号
+
+        # ---- 视觉 / 对话大模型（OpenAI 兼容 /chat/completions）----
+        # 默认用阿里云百炼 DashScope 的 OpenAI 兼容模式（qwen-vl-max-latest）。
+        # 任何 OpenAI 兼容端点都能用：OpenAI、DeepSeek、本地 vLLM/Ollama 等。
+        llm:
+          baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+          apiKey: ''             # ★必填★ 在这里填你的 API Key（本地无鉴权网关可留空）
+          model: 'qwen-vl-max-latest'
+          systemPrompt: '你是 QQ 群里的智能助手，请用简洁、友好的中文回答用户的问题；当用户发来图片时，请描述图片并针对图片内容作答。'
+          maxTokens: 1024
+          timeoutMs: 60000
+          # 图片 SSRF 防护：默认禁止下载内网 / 本机 / 云元数据地址的图片。
+          # 只有当你的图片确实来自局域网（如自建图床）时才设为 true。
+          allowPrivateImages: false
