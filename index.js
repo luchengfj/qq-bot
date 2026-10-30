@@ -13,6 +13,7 @@
 import { OneBotBridge } from './lib/onebot.js';
 import { BotLogic, normalizeConfig } from './lib/bot.js';
 import { SetupConsole } from './lib/setup.js';
+import { makeBridgeRoutes, createLogRing, createStats } from './lib/bridge.js';
 
 export const name = '@local/qq-bot';
 
@@ -22,8 +23,13 @@ export const name = '@local/qq-bot';
  */
 export function apply(ctx, config) {
   const cfg = normalizeConfig(config || {});
+  // Ring buffer shown in the DSH panel (and served over the bridge).
+  const logRing = createLogRing(200);
+  const stats = createStats();
+
   const log = (msg) => {
     const line = `[qq-bot] ${msg}`;
+    logRing.push(String(msg));
     // Prefer the host logger when available; always mirror to console.
     try {
       if (ctx.logger && typeof ctx.logger.info === 'function') ctx.logger.info(line);
@@ -41,6 +47,9 @@ export function apply(ctx, config) {
   const bridge = new OneBotBridge(cfg);
   const logic = new BotLogic(cfg, log);
 
+  // Long-term memory is loaded asynchronously; the bot works without it.
+  logic.loadMemory().catch((err) => log(`记忆加载失败: ${err.message}`));
+
   // Setup console: /setup + /api/* for QQ 扫码登录 and 一键接入.
   try {
     bridge.setup = new SetupConsole(cfg, bridge, log);
@@ -54,11 +63,52 @@ export function apply(ctx, config) {
   // Each incoming event gets a reply function bound to its source. The bot
   // logic stays transport-agnostic; it never throws out of this handler.
   bridge.on('event', (event, replyFn) => {
-    logic.handle(event, replyFn).catch((err) => {
+    stats.received += 1;
+    stats.lastAt = Date.now();
+    logic.handle(event, replyFn).then((result) => {
+      if (result && result.ok) stats.answered += 1;
+      else {
+        stats.failed += 1;
+        stats.lastError = (result && result.error) || '未知错误';
+      }
+    }).catch((err) => {
       // Defensive guard: handle() is designed not to throw, but never let an
       // exception escape an event emitter and crash the host.
-      log(`处理事件时发生意外错误: ${err && err.message ? err.message : String(err)}`);
+      stats.failed += 1;
+      stats.lastError = err && err.message ? err.message : String(err);
+      log(`处理事件时发生意外错误: ${stats.lastError}`);
     });
+  });
+
+  // Expose state + controls to the DSH Web UI panel (client.js fetches these
+  // same-origin routes). webServer is optional: without it the panel simply
+  // has no data, and the standalone /setup console still works.
+  ctx.inject(['webServer'], (sctx) => {
+    sctx.effect(() => {
+      const routes = makeBridgeRoutes({
+        cfg,
+        bridge,
+        setup: bridge.setup,
+        log,
+        logRing,
+        stats,
+        memory: logic.memory,
+      });
+      const disposers = [];
+      for (const route of routes) {
+        try {
+          disposers.push(sctx.webServer.register(route));
+        } catch (err) {
+          log(`注册面板接口失败 ${route.path}: ${err.message}`);
+        }
+      }
+      log(`面板接口已注册: ${routes.length} 个路由 (/api/qq-bot/*)`);
+      return () => {
+        for (const dispose of disposers) {
+          try { dispose(); } catch { /* ignore */ }
+        }
+      };
+    }, 'qq-bot: 面板接口');
   });
 
   // ctx.effect runs the callback immediately; the callback MUST return a
@@ -70,6 +120,8 @@ export function apply(ctx, config) {
       if (stopped) return;
       stopped = true;
       log('正在关闭 OneBot 服务…');
+      // Flush long-term memory before the process/plugin goes away.
+      try { logic.dispose(); } catch { /* ignore */ }
       bridge.stop().catch((err) => log(`关闭时出错: ${err.message}`));
     };
 
