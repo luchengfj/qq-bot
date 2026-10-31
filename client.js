@@ -118,6 +118,49 @@ window.__ModuleLoader__.load({
       ]);
     }
 
+    // Lets the user fetch + start NapCat without leaving Harness. Shown first
+    // when no runtime is detected, since everything else depends on it.
+    function InstallPanel({ state }) {
+      const [open, setOpen] = React.useState(false);
+      const rt = state.status && state.status.napcatRuntime;
+      const job = rt && rt.job;
+      if (!rt) return null;
+      const steps = (job && job.steps) || [];
+      return jsxs(Card, { title: 'NapCat 运行时' }, [
+        jsxs('div', { className: 'qq-row', key: 'r1' }, [
+          jsx(Pill, { key: 'p', ok: rt.installed }, rt.installed ? '已安装' : '未安装'),
+          jsx(Pill, { key: 'p2', ok: rt.running }, rt.running ? 'WebUI 在线' : 'WebUI 未连接'),
+          rt.busy ? jsx(Pill, { key: 'p3', ok: false }, `进行中：${rt.busy}`) : null,
+        ]),
+        jsx('p', { className: 'qq-muted', key: 'dir' }, `安装目录：${rt.dir}`),
+        rt.launcher ? jsx('p', { className: 'qq-muted', key: 'ln' }, `启动器：${rt.launcher}`) : null,
+        rt.configPath ? jsx('p', { className: 'qq-muted', key: 'cfg' }, `配置：${rt.configPath}`) : null,
+        rt.lastError ? jsx('p', { className: 'qq-err', key: 'er' }, rt.lastError) : null,
+        jsxs('div', { className: 'qq-row', key: 'r2' }, [
+          jsx(Button, {
+            key: 'i', onClick: () => state.action('napInstall'),
+            disabled: Boolean(state.busy),
+          }, rt.installed ? '重新安装' : '下载并安装 NapCat'),
+          jsx(Button, {
+            key: 'l', ghost: true, onClick: () => state.action('napLaunch'),
+            disabled: Boolean(state.busy) || !rt.installed,
+          }, '启动 NapCat'),
+        ]),
+        job
+          ? jsxs('div', { className: 'qq-mem-body', key: 'job' }, [
+              jsx('p', { className: 'qq-muted', key: 'st' }, `状态：${job.stage}${job.done ? '' : ' …'}`),
+              steps.length
+                ? jsx('ul', { className: 'qq-mem-facts', key: 'ul' },
+                    steps.map((s, i) => jsx('li', { key: `s${i}` }, String(s))))
+                : null,
+              job.error ? jsx('p', { className: 'qq-err', key: 'je' }, String(job.error)) : null,
+            ])
+          : jsx('p', { className: 'qq-muted', key: 'idle' },
+            '首次使用请先「下载并安装 NapCat」，然后「启动 NapCat」并扫码登录。'),
+        void open,
+      ]);
+    }
+
     function LoginPanel({ state, setState }) {
       const s = state.status;
       const setup = s && s.setupUrl;
@@ -425,6 +468,14 @@ window.__ModuleLoader__.load({
             await post('/memory-newtopic', payload);
             setNotice('已清空该会话的对话上下文（长期记忆保留）。');
             refresh();
+          } else if (name === 'napInstall') {
+            const result = await call('/napcat-install');
+            setNotice(result.started ? '已在后台开始下载安装，下方会显示进度。' : `无法开始：${result.error || '未知错误'}`);
+            refresh();
+          } else if (name === 'napLaunch') {
+            const result = await call('/napcat-launch');
+            setNotice(result.ok ? `已启动 NapCat（pid=${result.pid}），等待 WebUI 就绪后可扫码登录。` : `启动失败：${result.error || '未知错误'}`);
+            refresh();
           }
         } catch (err) {
           setNotice(`失败：${err.message || String(err)}`);
@@ -438,6 +489,7 @@ window.__ModuleLoader__.load({
 
       return jsx('div', { className: `qq-panel${compact ? ' qq-panel-compact' : ''}` }, [
         jsx(StatusPanel, { key: 'status', state, onRefresh: refresh }),
+        jsx(InstallPanel, { key: 'install', state }),
         jsx(LoginPanel, { key: 'login', state, setState: () => {} }),
         jsx(SendPanel, { key: 'send', state }),
         jsx(MemoryPanel, { key: 'memory', state }),

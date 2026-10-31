@@ -40,6 +40,9 @@
           reverseHost: '127.0.0.1'   # 让 NapCat 连回本插件时用的地址
           reversePort: 6700          # 让 NapCat 连回本插件时用的端口
           timeoutMs: 15000
+          # ---- 托管运行时：面板可自行下载并启动 NapCat ----
+          napcatDir: ''              # 留空= ~/.dsh/integrations/dsh-qq/napcat
+          webuiPort: 6099            # NapCat WebUI 端口（用于检测是否已启动）
 
         # ---- 触发规则 ----
         trigger:

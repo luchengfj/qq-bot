@@ -14,6 +14,7 @@ import { OneBotBridge } from './lib/onebot.js';
 import { BotLogic, normalizeConfig } from './lib/bot.js';
 import { SetupConsole } from './lib/setup.js';
 import { makeBridgeRoutes, createLogRing, createStats } from './lib/bridge.js';
+import { NapCatInstaller, DEFAULT_WEBUI_PORT } from './lib/installer.js';
 
 export const name = '@local/qq-bot';
 
@@ -80,6 +81,22 @@ export function apply(ctx, config) {
   bridge.on('log', log);
   bridge.on('error', (err) => log(`服务器错误: ${err.message}`));
 
+  // NapCat runtime installer: lets the panel fetch and launch a QQ client by
+  // itself instead of telling the user to go install one.
+  let installer = null;
+  try {
+    const runtime = cfg.napcat || {};
+    installer = new NapCatInstaller({
+      installDir: runtime.napcatDir || runtime.installDir || '',
+      webuiPort: Number(runtime.webuiPort) || DEFAULT_WEBUI_PORT,
+      timeoutMs: runtime.timeoutMs || 180000,
+      log,
+    });
+    installer.refresh().catch(() => {});
+  } catch (err) {
+    log(`NapCat 安装器初始化失败: ${err.message}`);
+  }
+
   // Each incoming event gets a reply function bound to its source. The bot
   // logic stays transport-agnostic; it never throws out of this handler.
   bridge.on('event', (event, replyFn) => {
@@ -113,6 +130,7 @@ export function apply(ctx, config) {
         logRing,
         stats,
         memory: logic.memory,
+        installer,
         llm: logic.llm,
         agentDefaultModel: logic.agentDefaultModel,
         attachments: logic.attachments,

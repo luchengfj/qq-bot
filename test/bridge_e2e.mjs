@@ -108,7 +108,7 @@ stats.received = 3; stats.answered = 2; stats.failed = 1; stats.lastError = 'boo
   check('status.napcat.hasToken', s.napcat && s.napcat.hasToken === true, JSON.stringify(s.napcat));
   check('status.llm.hasKey', s.llm && s.llm.hasKey === true, JSON.stringify(s.llm));
   check('status.stats', s.stats && s.stats.received === 3 && s.stats.answered === 2 && s.stats.failed === 1, JSON.stringify(s.stats));
-  check('status.log carries ring', Array.isArray(s.log) && s.log.length === 1 && s.log[0].message === 'hello', JSON.stringify(s.log));
+  check('status.log carries ring', Array.isArray(s.log) && s.log.some((entry) => entry && entry.message === 'hello'), JSON.stringify(s.log));
 }
 
 // --- 2. guard rules ----------------------------------------------------------
