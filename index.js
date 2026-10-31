@@ -47,6 +47,26 @@ export function apply(ctx, config) {
   const bridge = new OneBotBridge(cfg);
   const logic = new BotLogic(cfg, log);
 
+  // Hand the Host model services to the bot logic. `ctx.get` is the sanctioned
+  // way to read an already-registered service; it returns null when the host
+  // doesn't provide it, so every reference stays optional.
+  const pick = (name) => {
+    try {
+      return typeof ctx.get === 'function' ? ctx.get(name) : (ctx[name] ?? null);
+    } catch {
+      return null;
+    }
+  };
+  logic.llm = pick('llm');
+  logic.agentDefaultModel = pick('agentDefaultModel');
+  logic.attachments = pick('attachments');
+  if (cfg.llm.mode === 'harness') {
+    log(
+      `模型来源: Harness 内置 (${logic.llm ? 'llm 服务已就绪' : 'llm 服务缺失'}` +
+        `${logic.agentDefaultModel ? '，跟随 Harness 默认模型' : ''})`,
+    );
+  }
+
   // Long-term memory is loaded asynchronously; the bot works without it.
   logic.loadMemory().catch((err) => log(`记忆加载失败: ${err.message}`));
 
@@ -93,6 +113,9 @@ export function apply(ctx, config) {
         logRing,
         stats,
         memory: logic.memory,
+        llm: logic.llm,
+        agentDefaultModel: logic.agentDefaultModel,
+        attachments: logic.attachments,
       });
       const disposers = [];
       for (const route of routes) {

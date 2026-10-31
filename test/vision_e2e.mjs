@@ -97,7 +97,7 @@ async function main() {
 
     // 4. BotLogic.handle with a mock replyFn: image message gets answered, @sender applied on group
     const botCfg = normalizeConfig({
-      llm: { baseUrl: `http://127.0.0.1:${llmPort}/v1`, apiKey: '', model: 'mock-vl', allowPrivateImages: true },
+      llm: { mode: 'external', baseUrl: `http://127.0.0.1:${llmPort}/v1`, apiKey: '', model: 'mock-vl', allowPrivateImages: true },
       trigger: { groupRequiresAt: false },
     });
     const bot = new BotLogic(botCfg, () => {});
@@ -118,7 +118,7 @@ async function main() {
 
     // 5. Friendly error path when apiKey is missing for a hosted endpoint
     const botCfg2 = normalizeConfig({
-      llm: { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', apiKey: '', model: 'qwen-vl-max-latest' },
+      llm: { mode: 'external', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', apiKey: '', model: 'qwen-vl-max-latest' },
     });
     const bot2 = new BotLogic(botCfg2, () => {});
     const errReplies = [];

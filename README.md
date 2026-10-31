@@ -1,7 +1,10 @@
 # QQ 机器人通道插件（@local/qq-bot）
 
 把当前 DeepSeek Harness 变成一个 **QQ 机器人通道**：接收 QQ 消息（含图片），
-通过一个 **OpenAI 兼容的视觉/对话接口** 生成回答，再把回答发回 QQ。
+生成回答，再把回答发回 QQ。
+
+默认 **直接用你在 Harness 里选好的模型**，不需要任何 API 密钥；也可以切到
+外部 OpenAI 兼容端点（此时才需要 key）。
 
 基于 **OneBot v11** 协议，可用 NapCatQQ、Lagrange.Core、LLOneBot、go-cqhttp 等接入。
 插件完全自包含，只用 Node 内置模块，**不需要额外安装任何 npm 依赖**。
@@ -25,8 +28,9 @@ NapCat / Lagrange / ... (OneBot v11 实现)
 本插件 (在 Harness 内运行 HTTP + WebSocket 服务端)
   │  解析消息段 (CQ 码 / 数组)，提取图片 URL
   ▼
-OpenAI 兼容 /chat/completions (默认 DashScope qwen-vl-max-latest)
-  │  文字 + 图片(base64 data URI) → 回答
+模型后端（二选一）
+  ├─ mode: harness → Harness 当前选中的模型（免密钥，图片通过附件服务）
+  └─ mode: external → OpenAI 兼容 /chat/completions（需 apiKey）
   ▼
 回复通过同一 WebSocket（或 OneBot HTTP API）发回 QQ
 ```
@@ -35,16 +39,32 @@ OpenAI 兼容 /chat/completions (默认 DashScope qwen-vl-max-latest)
 
 ## 1. 配置插件
 
-打开插件目录下的 `cordis.patch.yml`，找到 `llm` 段，**至少填写 `apiKey`**：
+### 1.1 免密钥（推荐）
+
+默认就是 `mode: harness`：插件通过 Host 的 `llm` 服务调用你在 Harness 里
+**当前选中的模型**，不需要配置任何密钥。选中支持图片输入的模型时，QQ 里的
+图片会作为附件一起发给模型；选中的模型不支持图片时，插件自动改为只回答文字
+并在回复里说明看不了图片——不会整条丢掉。
 
 ```yaml
 llm:
+  mode: 'harness'   # 免密钥，跟随 Harness 默认模型
+  model: ''         # 留空=跟随 Harness；填了则强制用这个模型
+  provider: ''      # 留空=跟随 Harness；填了则强制用这个 provider
+```
+
+### 1.2 外部 OpenAI 兼容端点
+
+把 `mode` 改成 `external` 并**填写 `apiKey`**：
+
+```yaml
+llm:
+  mode: 'external'
   baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-  apiKey: 'sk-你的密钥'          # ★必填★
+  apiKey: 'sk-你的密钥'          # mode: external 时必填
   model: 'qwen-vl-max-latest'
 ```
 
-默认用阿里云百炼（DashScope）的 OpenAI 兼容模式 + 通义千问视觉模型。
 换成任何 OpenAI 兼容端点都可以，例如：
 
 - **OpenAI**：`baseUrl: 'https://api.openai.com/v1'`，`model: 'gpt-4o-mini'`
@@ -68,6 +88,9 @@ llm:
 | `allow.groups/users` | 白名单（空=不限制） | 空 |
 | `allow.denyUsers` | 黑名单 | 空 |
 | `maxImageBytes` | 单图下载上限 | 8MB |
+| `llm.mode` | `harness`（免密钥，跟随 Harness 模型）/ `external`（需 apiKey） | `harness` |
+| `llm.provider` / `llm.model` | 强制指定模型；留空=跟随 Harness 当前选择 | 空 |
+| `llm.temperature` | 采样温度（harness 模式生效） | `0.4` |
 | `llm.allowPrivateImages` | 允许下载内网/本机地址的图片（默认拒绝，防 SSRF） | `false` |
 
 改完配置或修改代码后，**必须重新加载插件** 才会生效（本地链接安装的插件不会自动热更新文件）：
@@ -92,11 +115,11 @@ llm:
 
 | 区块 | 内容 |
 | --- | --- |
-| 状态 | 连接数、登录 QQ、模型密钥、本插件端点、反向 WS 地址、NapCat 地址、消息统计（收到/已回复/失败）|
+| 状态 | 连接数、登录 QQ、模型来源（Harness 内置 / 外部端点）、本插件端点、反向 WS 地址、NapCat 地址、消息统计（收到/已回复/失败）、记忆概况 |
 | 扫码登录 + 一键接入 | 获取/刷新二维码、一键接入，二维码直接在面板里渲染 |
 | 发送测试消息 | 选群聊/私聊 + 填号 + 内容，立刻调用 `send_msg` |
 | 长期记忆 | 查看每个会话记住了什么、删除单条/整个会话/全部记忆、给某个会话「换个话题」清上下文、立即写盘 |
-| 诊断 | 测试模型接口连通性、清空统计、实时日志（最近 30 条）|
+| 诊断 | 测试模型连通性（走当前所选后端）、清空统计、实时日志（最近 30 条）|
 | 当前配置（只读） | 私聊/群触发规则、白名单与黑名单 |
 
 数据来自 Host 侧注册的 `/api/qq-bot/*` 路由（`lib/bridge.js`），只允许
@@ -197,7 +220,8 @@ http://127.0.0.1:6700/health
 
 - **私聊**机器人：直接发文字或图片，机器人会回复
 - **群聊**：需要 `@机器人`（或命中 `trigger.prefix` 前缀）才会响应
-- 发**图片**时，机器人会描述图片并针对内容作答
+- 发**图片**时，机器人会描述图片并针对内容作答（需要所选模型支持图片输入，
+  否则会说明看不了图片，仅回答文字）
 
 面板接口（DSH 面板用，同源 + 仅本机）：
 

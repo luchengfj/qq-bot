@@ -30,6 +30,14 @@ function check(name, cond, extra) {
 
 const noop = () => {};
 
+/** Flatten one OpenAI-style message content into plain text. */
+function textOf(message) {
+  if (!message) return '';
+  const content = message.content;
+  if (Array.isArray(content)) return content.map((part) => part && part.text ? String(part.text) : '').join('');
+  return String(content === undefined || content === null ? '' : content);
+}
+
 // --------------------------------------------------------------- reply.js ----
 
 check(
@@ -175,7 +183,7 @@ fs.rmSync(dir, { recursive: true, force: true });
 // ------------------------------------------------------------- bot logic ----
 
 const cfg = normalizeConfig({
-  llm: { baseUrl: 'http://127.0.0.1:1/v1', apiKey: 'k', model: 'm' },
+  llm: { mode: 'external', baseUrl: 'http://127.0.0.1:1/v1', apiKey: 'k', model: 'm' },
   memory: { enabled: true },
 });
 
@@ -247,7 +255,7 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const port = server.address().port;
 
 const memCfg = normalizeConfig({
-  llm: { baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: 'k', model: 'm' },
+  llm: { mode: 'external', baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: 'k', model: 'm' },
   memory: { enabled: true },
 });
 const memBot = new BotLogic(memCfg, noop);
@@ -263,11 +271,22 @@ await memBot.handle(
 server.close();
 
 const sent = seen[0];
-const sys = String(sent?.messages?.[0]?.content || '');
+// External (OpenAI-compatible) backend: messages[0] is the system turn,
+// then the optional history turns, then the current user content.
+const roles = (sent?.messages || []).map((m) => m.role);
+check('model: system turn first', roles[0] === 'system', JSON.stringify(roles));
+check('model: current turn is last', roles[roles.length - 1] === 'user', JSON.stringify(roles));
+const sys = String(sent.messages[0]?.content || '');
 check('facts injected into system prompt', sys.indexOf('小明') >= 0, sys.slice(0, 200));
 check('system prompt still has base instruction', sys.indexOf('QQ') >= 0);
-check('history turn present', sent.messages.length >= 2);
-check('last message is the user turn', sent.messages[sent.messages.length - 1].role === 'user');
+const userTurns = sent.messages.filter((m) => m.role === 'user');
+check('previous question present', textOf(userTurns[userTurns.length - 2]).indexOf('我叫小明') >= 0,
+  JSON.stringify(roles));
+const blocks = userTurns[userTurns.length - 1].content;
+check('content is a block array', Array.isArray(blocks), JSON.stringify(blocks).slice(0, 120));
+check('current question present in content',
+  blocks.map((b) => b.text || '').join('').indexOf('今天怎么样') >= 0,
+  JSON.stringify(blocks).slice(0, 200));
 
 console.log(`\n${fail === 0 ? 'ALL_MEMORY_PASS' : 'MEMORY_FAILURES'} ${pass}/${pass + fail}`);
 process.exit(fail === 0 ? 0 : 1);

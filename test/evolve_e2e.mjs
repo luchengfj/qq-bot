@@ -191,7 +191,7 @@ async function withBot(fn, cfgOverrides = {}) {
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const cfg = normalizeConfig({
-    llm: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, apiKey: 'k', model: 'm' },
+    llm: { mode: 'external', baseUrl: `http://127.0.0.1:${server.address().port}/v1`, apiKey: 'k', model: 'm' },
   });
   const bot = new BotLogic(cfg, () => {});
   const sent = [];
@@ -222,6 +222,7 @@ async function withBot(fn, cfgOverrides = {}) {
 
   const cfg = normalizeConfig({
     llm: {
+      mode: 'external',
       baseUrl: `http://127.0.0.1:${port}/v1`,
       apiKey: 'test',
       model: 'test-model',
@@ -277,6 +278,7 @@ async function withBot(fn, cfgOverrides = {}) {
 
   const cfg = normalizeConfig({
     llm: {
+      mode: 'external',
       baseUrl: `http://127.0.0.1:${port}/v1`,
       apiKey: 'test',
       model: 'test-model',

@@ -53,13 +53,23 @@
           users: []              # 只响应这些 QQ 号；空=所有人
           denyUsers: []          # 屏蔽这些 QQ 号
 
-        # ---- 视觉 / 对话大模型（OpenAI 兼容 /chat/completions）----
-        # 默认用阿里云百炼 DashScope 的 OpenAI 兼容模式（qwen-vl-max-latest）。
-        # 任何 OpenAI 兼容端点都能用：OpenAI、DeepSeek、本地 vLLM/Ollama 等。
+        # ---- 对话 / 视觉大模型 ----
+        # mode: harness  = 直接用 Harness 里选好的模型，不需要任何密钥 ★默认★
+        # mode: external = 走 OpenAI 兼容端点，需要填 apiKey
         llm:
+          mode: harness           # 'harness'（推荐，免密钥）或 'external'
+          # 下面三项只在 mode: harness 时生效，且都可以留空：
+          # 留空 = 跟随 Harness 当前选择的模型；填写则强制指定。
+          provider: ''            # 例：'deepseek'
+          reasoningEffort: ''     # 例：'low' / 'medium' / 'high'（模型支持时）
+          temperature: 0.4
+          # 以下是 mode: external 才用到的 OpenAI 兼容端点配置
+          # 默认用阿里云百炼 DashScope 的 OpenAI 兼容模式。
+          # 任何 OpenAI 兼容端点都能用：OpenAI、DeepSeek、本地 vLLM/Ollama 等。
           baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-          apiKey: ''             # ★必填★ 在这里填你的 API Key（本地无鉴权网关可留空）
-          model: 'qwen-vl-max-latest'
+          apiKey: ''             # mode: external 时必填（本地无鉴权网关可留空）
+          model: ''              # 模型名：mode: external 留空则默认 qwen-vl-max-latest；
+                                 # mode: harness 请保持留空，否则会强制指定该模型
           systemPrompt: '你是 QQ 群里的智能助手，请用简洁、友好的中文回答用户的问题；当用户发来图片时，请描述图片并针对图片内容作答。'
           maxTokens: 1024
           timeoutMs: 60000
