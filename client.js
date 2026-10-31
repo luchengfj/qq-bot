@@ -14,7 +14,6 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react');
     const h = React.createElement;
-    const { jsx, jsxs } = require('react/jsx-runtime');
 
     const BRIDGE = '/api/qq-bot';
     const PANEL_ID = 'qq-bot';
@@ -40,30 +39,30 @@ window.__ModuleLoader__.load({
     // ---------- small presentational helpers ----------
 
     function Pill({ children, kind }) {
-      return jsx('span', {
+      return h('span', {
         className: 'qq-pill' + (kind ? ` qq-pill-${kind}` : ''),
       }, children);
     }
 
     function Card({ title, extra, children }) {
-      return jsxs('section', { className: 'qq-card' }, [
-        jsxs('header', { className: 'qq-card-head', key: 'h' }, [
-          jsx('h3', { key: 't' }, title),
-          extra ? jsx('div', { key: 'e', className: 'qq-card-extra' }, extra) : null,
+      return h('section', { className: 'qq-card' }, [
+        h('header', { className: 'qq-card-head', key: 'h' }, [
+          h('h3', { key: 't' }, title),
+          extra ? h('div', { key: 'e', className: 'qq-card-extra' }, extra) : null,
         ]),
-        jsx('div', { key: 'b', className: 'qq-card-body' }, children),
+        h('div', { key: 'b', className: 'qq-card-body' }, children),
       ]);
     }
 
     function Field({ label, children }) {
-      return jsxs('div', { className: 'qq-field' }, [
-        jsx('label', { key: 'l' }, label),
-        jsx('div', { key: 'c' }, children),
+      return h('div', { className: 'qq-field' }, [
+        h('label', { key: 'l' }, label),
+        h('div', { key: 'c' }, children),
       ]);
     }
 
     function Button({ onClick, disabled, children, ghost, danger }) {
-      return jsx('button', {
+      return h('button', {
         type: 'button',
         className: 'qq-btn' + (ghost ? ' qq-btn-ghost' : '') + (danger ? ' qq-btn-danger' : ''),
         onClick,
@@ -76,44 +75,44 @@ window.__ModuleLoader__.load({
     function StatusPanel({ state, onRefresh }) {
       const s = state.status;
       if (state.error) {
-        return jsxs(Card, { title: 'QQ 机器人 · 状态', extra: jsx(Button, { onClick: onRefresh, ghost: true }, '重试') }, [
-          jsx('p', { className: 'qq-error', key: 'e' }, state.error),
-          jsx('p', { className: 'qq-muted', key: 'm' }, '请确认插件已启用，且 /api/qq-bot/* 路由已注册（重新启用插件后再试）。'),
+        return h(Card, { title: 'QQ 机器人 · 状态', extra: h(Button, { onClick: onRefresh, ghost: true }, '重试') }, [
+          h('p', { className: 'qq-error', key: 'e' }, state.error),
+          h('p', { className: 'qq-muted', key: 'm' }, '请确认插件已启用，且 /api/qq-bot/* 路由已注册（重新启用插件后再试）。'),
         ]);
       }
-      if (!s) return jsx(Card, { title: 'QQ 机器人 · 状态' }, jsx('span', { className: 'qq-muted' }, '加载中…'));
+      if (!s) return h(Card, { title: 'QQ 机器人 · 状态' }, h('span', { className: 'qq-muted' }, '加载中…'));
 
       const connected = s.connections > 0;
-      return jsxs(Card, {
+      return h(Card, {
         title: 'QQ 机器人 · 状态',
-        extra: jsx(Button, { onClick: onRefresh, ghost: true }, '刷新'),
+        extra: h(Button, { onClick: onRefresh, ghost: true }, '刷新'),
       }, [
-        jsxs('div', { className: 'qq-row', key: 'pills' }, [
-          jsx(Pill, { key: 'c', kind: connected ? 'ok' : 'warn' },
+        h('div', { className: 'qq-row', key: 'pills' }, [
+          h(Pill, { key: 'c', kind: connected ? 'ok' : 'warn' },
             connected ? `OneBot 已连接 ${s.connections}` : '等待 NapCat 连接'),
-          jsx(Pill, { key: 'q', kind: s.selfIds && s.selfIds.length ? 'ok' : 'warn' },
+          h(Pill, { key: 'q', kind: s.selfIds && s.selfIds.length ? 'ok' : 'warn' },
             s.selfIds && s.selfIds.length ? `已登录 QQ ${s.selfIds.join(', ')}` : '未登录 QQ'),
-          jsx(Pill, { key: 'l', kind: s.llm.hasKey ? 'ok' : 'warn' },
+          h(Pill, { key: 'l', kind: s.llm.hasKey ? 'ok' : 'warn' },
             s.llm.hasKey ? `模型 ${s.llm.model}` : '未配置模型密钥'),
         ]),
-        jsxs('dl', { className: 'qq-dl', key: 'dl' }, [
-          jsx('dt', { key: 'd1' }, '本插件端点'),
-          jsx('dd', { key: 'v1' }, jsx('code', null, `${s.endpoint.host}:${s.endpoint.port}${s.endpoint.path}`)),
-          jsx('dt', { key: 'd2' }, '反向 WS 地址'),
-          jsx('dd', { key: 'v2' }, jsx('code', null, s.reverseUrl || '—')),
-          jsx('dt', { key: 'd3' }, '独立控制台'),
-          jsx('dd', { key: 'v3' }, jsx('a', { href: s.setupUrl, target: '_blank', rel: 'noreferrer' }, s.setupUrl)),
-          jsx('dt', { key: 'd4' }, 'NapCat WebUI'),
-          jsx('dd', { key: 'v4' }, jsxs('span', null, [
-            jsx('code', { key: 'u' }, s.napcat.baseUrl || '—'),
-            s.napcat.hasToken ? null : jsx(Pill, { key: 't', kind: 'warn' }, '未填令牌'),
+        h('dl', { className: 'qq-dl', key: 'dl' }, [
+          h('dt', { key: 'd1' }, '本插件端点'),
+          h('dd', { key: 'v1' }, h('code', null, `${s.endpoint.host}:${s.endpoint.port}${s.endpoint.path}`)),
+          h('dt', { key: 'd2' }, '反向 WS 地址'),
+          h('dd', { key: 'v2' }, h('code', null, s.reverseUrl || '—')),
+          h('dt', { key: 'd3' }, '独立控制台'),
+          h('dd', { key: 'v3' }, h('a', { href: s.setupUrl, target: '_blank', rel: 'noreferrer' }, s.setupUrl)),
+          h('dt', { key: 'd4' }, 'NapCat WebUI'),
+          h('dd', { key: 'v4' }, h('span', null, [
+            h('code', { key: 'u' }, s.napcat.baseUrl || '—'),
+            s.napcat.hasToken ? null : h(Pill, { key: 't', kind: 'warn' }, '未填令牌'),
           ])),
-          jsx('dt', { key: 'd5' }, '消息统计'),
-          jsx('dd', { key: 'v5' },
+          h('dt', { key: 'd5' }, '消息统计'),
+          h('dd', { key: 'v5' },
             `收到 ${s.stats.received} · 已回复 ${s.stats.answered} · 失败 ${s.stats.failed}`),
         ]),
         s.stats.lastError
-          ? jsx('p', { className: 'qq-error', key: 'err' }, `最近错误：${s.stats.lastError}`)
+          ? h('p', { className: 'qq-error', key: 'err' }, `最近错误：${s.stats.lastError}`)
           : null,
       ]);
     }
@@ -126,36 +125,36 @@ window.__ModuleLoader__.load({
       const job = rt && rt.job;
       if (!rt) return null;
       const steps = (job && job.steps) || [];
-      return jsxs(Card, { title: 'NapCat 运行时' }, [
-        jsxs('div', { className: 'qq-row', key: 'r1' }, [
-          jsx(Pill, { key: 'p', ok: rt.installed }, rt.installed ? '已安装' : '未安装'),
-          jsx(Pill, { key: 'p2', ok: rt.running }, rt.running ? 'WebUI 在线' : 'WebUI 未连接'),
-          rt.busy ? jsx(Pill, { key: 'p3', ok: false }, `进行中：${rt.busy}`) : null,
+      return h(Card, { title: 'NapCat 运行时' }, [
+        h('div', { className: 'qq-row', key: 'r1' }, [
+          h(Pill, { key: 'p', ok: rt.installed }, rt.installed ? '已安装' : '未安装'),
+          h(Pill, { key: 'p2', ok: rt.running }, rt.running ? 'WebUI 在线' : 'WebUI 未连接'),
+          rt.busy ? h(Pill, { key: 'p3', ok: false }, `进行中：${rt.busy}`) : null,
         ]),
-        jsx('p', { className: 'qq-muted', key: 'dir' }, `安装目录：${rt.dir}`),
-        rt.launcher ? jsx('p', { className: 'qq-muted', key: 'ln' }, `启动器：${rt.launcher}`) : null,
-        rt.configPath ? jsx('p', { className: 'qq-muted', key: 'cfg' }, `配置：${rt.configPath}`) : null,
-        rt.lastError ? jsx('p', { className: 'qq-err', key: 'er' }, rt.lastError) : null,
-        jsxs('div', { className: 'qq-row', key: 'r2' }, [
-          jsx(Button, {
+        h('p', { className: 'qq-muted', key: 'dir' }, `安装目录：${rt.dir}`),
+        rt.launcher ? h('p', { className: 'qq-muted', key: 'ln' }, `启动器：${rt.launcher}`) : null,
+        rt.configPath ? h('p', { className: 'qq-muted', key: 'cfg' }, `配置：${rt.configPath}`) : null,
+        rt.lastError ? h('p', { className: 'qq-err', key: 'er' }, rt.lastError) : null,
+        h('div', { className: 'qq-row', key: 'r2' }, [
+          h(Button, {
             key: 'i', onClick: () => state.action('napInstall'),
             disabled: Boolean(state.busy),
           }, rt.installed ? '重新安装' : '下载并安装 NapCat'),
-          jsx(Button, {
+          h(Button, {
             key: 'l', ghost: true, onClick: () => state.action('napLaunch'),
             disabled: Boolean(state.busy) || !rt.installed,
           }, '启动 NapCat'),
         ]),
         job
-          ? jsxs('div', { className: 'qq-mem-body', key: 'job' }, [
-              jsx('p', { className: 'qq-muted', key: 'st' }, `状态：${job.stage}${job.done ? '' : ' …'}`),
+          ? h('div', { className: 'qq-mem-body', key: 'job' }, [
+              h('p', { className: 'qq-muted', key: 'st' }, `状态：${job.stage}${job.done ? '' : ' …'}`),
               steps.length
-                ? jsx('ul', { className: 'qq-mem-facts', key: 'ul' },
-                    steps.map((s, i) => jsx('li', { key: `s${i}` }, String(s))))
+                ? h('ul', { className: 'qq-mem-facts', key: 'ul' },
+                    steps.map((s, i) => h('li', { key: `s${i}` }, String(s))))
                 : null,
-              job.error ? jsx('p', { className: 'qq-err', key: 'je' }, String(job.error)) : null,
+              job.error ? h('p', { className: 'qq-err', key: 'je' }, String(job.error)) : null,
             ])
-          : jsx('p', { className: 'qq-muted', key: 'idle' },
+          : h('p', { className: 'qq-muted', key: 'idle' },
             '首次使用请先「下载并安装 NapCat」，然后「启动 NapCat」并扫码登录。'),
         void open,
       ]);
@@ -164,29 +163,29 @@ window.__ModuleLoader__.load({
     function LoginPanel({ state, setState }) {
       const s = state.status;
       const setup = s && s.setupUrl;
-      return jsxs(Card, { title: '扫码登录 + 一键接入' }, [
-        jsxs('div', { className: 'qq-row', key: 'row' }, [
-          jsx(Button, { key: 'qr', onClick: () => state.action('newQr'), disabled: state.busy === 'newQr' }, '获取二维码'),
-          jsx(Button, {
+      return h(Card, { title: '扫码登录 + 一键接入' }, [
+        h('div', { className: 'qq-row', key: 'row' }, [
+          h(Button, { key: 'qr', onClick: () => state.action('newQr'), disabled: state.busy === 'newQr' }, '获取二维码'),
+          h(Button, {
             key: 'rf', ghost: true, disabled: !state.qrUrl || state.busy === 'newQr',
             onClick: () => state.action('newQr'),
           }, '刷新二维码'),
-          jsx(Button, { key: 'lk', onClick: () => state.action('link'), disabled: state.busy === 'link' }, '一键接入'),
+          h(Button, { key: 'lk', onClick: () => state.action('link'), disabled: state.busy === 'link' }, '一键接入'),
         ]),
-        jsxs('div', { className: 'qq-qr', key: 'box' }, [
+        h('div', { className: 'qq-qr', key: 'box' }, [
           state.qrUrl
-            ? jsx('img', {
+            ? h('img', {
                 key: 'img', className: 'qq-qr-img', alt: 'QQ 登录二维码',
                 src: `${BRIDGE}/qr.svg?t=${state.qrStamp}`,
               })
-            : jsx('span', { className: 'qq-muted', key: 'hint' }, '点击「获取二维码」，然后用手机 QQ 扫码'),
+            : h('span', { className: 'qq-muted', key: 'hint' }, '点击「获取二维码」，然后用手机 QQ 扫码'),
         ]),
-        state.notice ? jsx('p', { className: 'qq-muted', key: 'n' }, state.notice) : null,
-        jsx('p', { className: 'qq-muted', key: 'm' },
+        state.notice ? h('p', { className: 'qq-muted', key: 'n' }, state.notice) : null,
+        h('p', { className: 'qq-muted', key: 'm' },
           '二维码由插件本地生成，不会上传到任何第三方服务。若无法生成，请确认 NapCat 已启动、端口正确，且 napcat.webuiToken 与 NapCat 的登录令牌一致。'),
-        setup ? jsx('p', { className: 'qq-muted', key: 's' }, jsxs('span', null, [
+        setup ? h('p', { className: 'qq-muted', key: 's' }, h('span', null, [
           '也可以使用独立控制台：',
-          jsx('a', { href: setup, target: '_blank', rel: 'noreferrer' }, setup),
+          h('a', { href: setup, target: '_blank', rel: 'noreferrer' }, setup),
         ])) : null,
       ]);
       // setState is reserved for future controlled use inside the panel shell.
@@ -205,50 +204,50 @@ window.__ModuleLoader__.load({
       const valid = Boolean(form.text.trim()) && (
         form.messageType === 'private' ? Boolean(form.userId.trim()) : Boolean(form.groupId.trim())
       );
-      return jsxs(Card, { title: '发送测试消息' }, [
-        jsxs('div', { className: 'qq-row', key: 'r1' }, [
-          jsxs(Field, { label: '类型', key: 't' }, [
-            jsxs('select', { className: 'qq-input', value: form.messageType, onChange: update('messageType') }, [
-              jsx('option', { key: 'g', value: 'group' }, '群消息'),
-              jsx('option', { key: 'p', value: 'private' }, '私聊消息'),
+      return h(Card, { title: '发送测试消息' }, [
+        h('div', { className: 'qq-row', key: 'r1' }, [
+          h(Field, { label: '类型', key: 't' }, [
+            h('select', { className: 'qq-input', value: form.messageType, onChange: update('messageType') }, [
+              h('option', { key: 'g', value: 'group' }, '群消息'),
+              h('option', { key: 'p', value: 'private' }, '私聊消息'),
             ]),
           ]),
           form.messageType === 'private'
-            ? jsx(Field, { label: 'QQ 号', key: 'u' },
-                jsx('input', { className: 'qq-input', value: form.userId, onChange: update('userId'), placeholder: '如 10001' }))
-            : jsx(Field, { label: '群号', key: 'g' },
-                jsx('input', { className: 'qq-input', value: form.groupId, onChange: update('groupId'), placeholder: '如 123456' })),
+            ? h(Field, { label: 'QQ 号', key: 'u' },
+                h('input', { className: 'qq-input', value: form.userId, onChange: update('userId'), placeholder: '如 10001' }))
+            : h(Field, { label: '群号', key: 'g' },
+                h('input', { className: 'qq-input', value: form.groupId, onChange: update('groupId'), placeholder: '如 123456' })),
         ]),
-        jsx(Field, { label: '内容', key: 'c' },
-          jsx('input', { className: 'qq-input', value: form.text, onChange: update('text'), placeholder: '要发送的文本' })),
-        jsx(Button, { key: 'b', onClick: send, disabled: !valid || state.busy === 'send' }, '发送'),
+        h(Field, { label: '内容', key: 'c' },
+          h('input', { className: 'qq-input', value: form.text, onChange: update('text'), placeholder: '要发送的文本' })),
+        h(Button, { key: 'b', onClick: send, disabled: !valid || state.busy === 'send' }, '发送'),
       ]);
     }
 
     function DiagPanel({ state }) {
       const s = state.status;
-      return jsxs(Card, {
+      return h(Card, {
         title: '诊断',
-        extra: jsxs('div', { className: 'qq-row', key: 'x' }, [
-          jsx(Button, { key: 't', ghost: true, disabled: state.busy === 'llmTest', onClick: () => state.action('llmTest') }, '测试模型接口'),
-          jsx(Button, { key: 'r', ghost: true, onClick: () => state.action('resetStats') }, '清空统计'),
-          jsx(Button, { key: 'c', ghost: true, onClick: () => state.action('clearLog') }, '清空日志'),
+        extra: h('div', { className: 'qq-row', key: 'x' }, [
+          h(Button, { key: 't', ghost: true, disabled: state.busy === 'llmTest', onClick: () => state.action('llmTest') }, '测试模型接口'),
+          h(Button, { key: 'r', ghost: true, onClick: () => state.action('resetStats') }, '清空统计'),
+          h(Button, { key: 'c', ghost: true, onClick: () => state.action('clearLog') }, '清空日志'),
         ]),
       }, [
         state.testResult
-          ? jsx('p', {
+          ? h('p', {
               key: 'tr', className: state.testResult.ok ? 'qq-ok' : 'qq-error',
             }, state.testResult.ok
               ? `模型接口正常（${state.testResult.ms} ms）：${state.testResult.reply}`
               : `模型接口异常：${state.testResult.error}`)
           : null,
-        jsx('div', { className: 'qq-log', key: 'log' },
+        h('div', { className: 'qq-log', key: 'log' },
           (s && s.log && s.log.length)
-            ? s.log.slice().reverse().map((line) => jsxs('div', { className: 'qq-log-line', key: line.at + ':' + line.message }, [
-                jsx('span', { className: 'qq-log-time', key: 't' }, new Date(line.at).toLocaleTimeString()),
-                jsx('span', { className: 'qq-log-msg', key: 'm' }, line.message),
+            ? s.log.slice().reverse().map((line) => h('div', { className: 'qq-log-line', key: line.at + ':' + line.message }, [
+                h('span', { className: 'qq-log-time', key: 't' }, new Date(line.at).toLocaleTimeString()),
+                h('span', { className: 'qq-log-msg', key: 'm' }, line.message),
               ]))
-            : jsx('span', { className: 'qq-muted' }, '暂无日志')),
+            : h('span', { className: 'qq-muted' }, '暂无日志')),
       ]);
     }
 
@@ -257,22 +256,22 @@ window.__ModuleLoader__.load({
       if (!s) return null;
       const trigger = s.trigger || {};
       const allow = s.allow || {};
-      return jsxs(Card, { title: '当前配置（只读）' }, [
-        jsxs('dl', { className: 'qq-dl' }, [
-          jsx('dt', { key: 'd1' }, '私聊'),
-          jsx('dd', { key: 'v1' }, trigger.privateAlways ? '全部响应' : '不响应'),
-          jsx('dt', { key: 'd2' }, '群消息'),
-          jsx('dd', { key: 'v2' }, trigger.groupRequiresAt
+      return h(Card, { title: '当前配置（只读）' }, [
+        h('dl', { className: 'qq-dl' }, [
+          h('dt', { key: 'd1' }, '私聊'),
+          h('dd', { key: 'v1' }, trigger.privateAlways ? '全部响应' : '不响应'),
+          h('dt', { key: 'd2' }, '群消息'),
+          h('dd', { key: 'v2' }, trigger.groupRequiresAt
             ? `需要 @机器人${trigger.prefix ? ` 或前缀 "${trigger.prefix}"` : ''}`
             : '全部响应'),
-          jsx('dt', { key: 'd3' }, '群白名单'),
-          jsx('dd', { key: 'v3' }, allow.groups && allow.groups.length ? allow.groups.join(', ') : '不限制'),
-          jsx('dt', { key: 'd4' }, '用户白名单'),
-          jsx('dd', { key: 'v4' }, allow.users && allow.users.length ? allow.users.join(', ') : '不限制'),
-          jsx('dt', { key: 'd5' }, '黑名单'),
-          jsx('dd', { key: 'v5' }, allow.denyUsers && allow.denyUsers.length ? allow.denyUsers.join(', ') : '无'),
+          h('dt', { key: 'd3' }, '群白名单'),
+          h('dd', { key: 'v3' }, allow.groups && allow.groups.length ? allow.groups.join(', ') : '不限制'),
+          h('dt', { key: 'd4' }, '用户白名单'),
+          h('dd', { key: 'v4' }, allow.users && allow.users.length ? allow.users.join(', ') : '不限制'),
+          h('dt', { key: 'd5' }, '黑名单'),
+          h('dd', { key: 'v5' }, allow.denyUsers && allow.denyUsers.length ? allow.denyUsers.join(', ') : '无'),
         ]),
-        jsx('p', { className: 'qq-muted', key: 'm' },
+        h('p', { className: 'qq-muted', key: 'm' },
           '配置在插件包的 cordis.patch.yml 中修改；改完后在插件管理里关闭再启用本插件即可生效（本地目录安装不会热更新）。'),
       ]);
     }
@@ -315,67 +314,67 @@ window.__ModuleLoader__.load({
         }
       };
 
-      return jsxs(Card, {
+      return h(Card, {
         title: '长期记忆',
-        extra: jsxs('div', { className: 'qq-row', key: 'x' }, [
-          jsx(Button, {
+        extra: h('div', { className: 'qq-row', key: 'x' }, [
+          h(Button, {
             key: 's', ghost: true, disabled: state.busy === 'memSave',
             onClick: () => state.action('memSave'),
           }, '立即保存'),
-          jsx(Button, {
+          h(Button, {
             key: 'c', ghost: true, className: 'qq-btn-danger',
             disabled: state.busy === 'memClearAll',
             onClick: () => state.action('memClearAll'),
           }, '清空全部'),
         ]),
       }, [
-        jsxs('div', { className: 'qq-row', key: 'stats' }, [
-          jsx(Pill, { key: 'on', tone: mem.enabled ? 'ok' : 'warn' }, mem.enabled ? '已启用' : '已关闭'),
-          jsx('span', { className: 'qq-muted', key: 'n' }, `记住了 ${mem.senders} 个会话 / ${mem.facts} 条信息`),
+        h('div', { className: 'qq-row', key: 'stats' }, [
+          h(Pill, { key: 'on', tone: mem.enabled ? 'ok' : 'warn' }, mem.enabled ? '已启用' : '已关闭'),
+          h('span', { className: 'qq-muted', key: 'n' }, `记住了 ${mem.senders} 个会话 / ${mem.facts} 条信息`),
           mem.maxHistory > 0
-            ? jsx('span', { className: 'qq-muted', key: 'h' },
+            ? h('span', { className: 'qq-muted', key: 'h' },
               `上下文 ${mem.turns || 0} 轮（每会话最多 ${mem.maxHistory}，静默 ${Math.round((mem.historyTtlMs || 0) / 60000)} 分钟重置）`)
             : null,
-          mem.file ? jsx('span', { className: 'qq-muted', key: 'f' }, `文件：${mem.file}`)
-            : jsx('span', { className: 'qq-muted', key: 'nf' }, '未配置持久化文件（重启后丢失）'),
-          mem.lastError ? jsx('span', { className: 'qq-error', key: 'e' }, mem.lastError) : null,
+          mem.file ? h('span', { className: 'qq-muted', key: 'f' }, `文件：${mem.file}`)
+            : h('span', { className: 'qq-muted', key: 'nf' }, '未配置持久化文件（重启后丢失）'),
+          mem.lastError ? h('span', { className: 'qq-error', key: 'e' }, mem.lastError) : null,
         ]),
         senders.length === 0
-          ? jsx('p', { className: 'qq-muted', key: 'empty' },
+          ? h('p', { className: 'qq-muted', key: 'empty' },
             '还没有任何记忆。用户说「我叫小明」这类话时会自动记住；也可以在 QQ 里发「我的记忆」查看。')
-          : jsx('div', { className: 'qq-mem-list', key: 'list' },
-              senders.map((row) => jsxs('div', { className: 'qq-mem-row', key: row.key }, [
-                jsxs('button', {
+          : h('div', { className: 'qq-mem-list', key: 'list' },
+              senders.map((row) => h('div', { className: 'qq-mem-row', key: row.key }, [
+                h('button', {
                   type: 'button', className: 'qq-mem-head',
                   onClick: () => toggle(row.key),
                 }, [
-                  jsx('span', { className: 'qq-mem-key', key: 'k' }, row.key),
-                  jsx('span', { className: 'qq-muted', key: 'c' }, `${row.facts} 条`),
-                  row.turns > 0 ? jsx('span', { className: 'qq-muted', key: 't' }, `${row.turns} 轮上下文`) : null,
-                  jsx('span', { className: 'qq-muted', key: 'p' }, row.preview),
-                  jsx('span', { className: 'qq-mem-caret', key: 'x' }, open === row.key ? '▾' : '▸'),
+                  h('span', { className: 'qq-mem-key', key: 'k' }, row.key),
+                  h('span', { className: 'qq-muted', key: 'c' }, `${row.facts} 条`),
+                  row.turns > 0 ? h('span', { className: 'qq-muted', key: 't' }, `${row.turns} 轮上下文`) : null,
+                  h('span', { className: 'qq-muted', key: 'p' }, row.preview),
+                  h('span', { className: 'qq-mem-caret', key: 'x' }, open === row.key ? '▾' : '▸'),
                 ]),
                 open === row.key
-                  ? jsxs('div', { className: 'qq-mem-body', key: 'b' }, [
+                  ? h('div', { className: 'qq-mem-body', key: 'b' }, [
                       loading === row.key
-                        ? jsx('span', { className: 'qq-muted' }, '加载中…')
+                        ? h('span', { className: 'qq-muted' }, '加载中…')
                         : facts.length === 0
-                          ? jsx('span', { className: 'qq-muted' }, '（空）')
-                          : jsx('ul', { className: 'qq-mem-facts' },
-                              facts.map((f, i) => jsxs('li', { key: `${i}:${f}` }, [
-                                jsx('span', { key: 't' }, f),
-                                jsx('button', {
+                          ? h('span', { className: 'qq-muted' }, '（空）')
+                          : h('ul', { className: 'qq-mem-facts' },
+                              facts.map((f, i) => h('li', { key: `${i}:${f}` }, [
+                                h('span', { key: 't' }, f),
+                                h('button', {
                                   key: 'd', type: 'button', className: 'qq-btn-ghost qq-btn-xs',
                                   title: '删除这条',
                                   onClick: () => state.action('memForget', { key: row.key, fact: f }).then(() => toggle(row.key).then(() => toggle(row.key))),
                                 }, '删除'),
                               ]))),
-                      jsxs('div', { className: 'qq-row', key: 'acts' }, [
-                        jsx(Button, {
+                      h('div', { className: 'qq-row', key: 'acts' }, [
+                        h(Button, {
                           key: 'nt', ghost: true, disabled: state.busy === 'memNewTopic',
                           onClick: () => state.action('memNewTopic', { key: row.key }).then(() => refreshOpen(row.key)),
                         }, '换个话题（清上下文）'),
-                        jsx(Button, {
+                        h(Button, {
                           key: 'del', ghost: true, className: 'qq-btn-danger',
                           onClick: () => state.action('memForget', { key: row.key }).then(() => { setOpen(''); setFacts([]); }),
                         }, '清除这个会话的记忆'),
@@ -383,7 +382,7 @@ window.__ModuleLoader__.load({
                     ])
                   : null,
               ]))),
-        jsx('p', { className: 'qq-muted', key: 'tip' },
+        h('p', { className: 'qq-muted', key: 'tip' },
           '私聊与群聊的记忆互相隔离。QQ 里可发 /help /status /new /memory /forget；修改 cordis.patch.yml 的 memory.file 可以把记忆写到磁盘，重启后仍然记得。'),
       ]);
     }
@@ -487,14 +486,14 @@ window.__ModuleLoader__.load({
 
       const state = { status, error, busy, notice, qrUrl, qrStamp, testResult, action, refresh };
 
-      return jsx('div', { className: `qq-panel${compact ? ' qq-panel-compact' : ''}` }, [
-        jsx(StatusPanel, { key: 'status', state, onRefresh: refresh }),
-        jsx(InstallPanel, { key: 'install', state }),
-        jsx(LoginPanel, { key: 'login', state, setState: () => {} }),
-        jsx(SendPanel, { key: 'send', state }),
-        jsx(MemoryPanel, { key: 'memory', state }),
-        jsx(DiagPanel, { key: 'diag', state }),
-        jsx(ConfigPanel, { key: 'config', state }),
+      return h('div', { className: `qq-panel${compact ? ' qq-panel-compact' : ''}` }, [
+        h(StatusPanel, { key: 'status', state, onRefresh: refresh }),
+        h(InstallPanel, { key: 'install', state }),
+        h(LoginPanel, { key: 'login', state, setState: () => {} }),
+        h(SendPanel, { key: 'send', state }),
+        h(MemoryPanel, { key: 'memory', state }),
+        h(DiagPanel, { key: 'diag', state }),
+        h(ConfigPanel, { key: 'config', state }),
       ]);
     }
 
@@ -511,7 +510,7 @@ window.__ModuleLoader__.load({
         }).catch(() => { /* keep the default label */ });
         return () => { alive = false; };
       }, []);
-      return jsx('span', { className: 'qq-summary' }, text);
+      return h('span', { className: 'qq-summary' }, text);
     }
 
     const STYLE_ID = 'qq-bot-panel-style';
@@ -570,8 +569,8 @@ window.__ModuleLoader__.load({
     }
 
     function Icon() {
-      return jsx('svg', { viewBox: '0 0 24 24', width: 18, height: 18, 'aria-hidden': 'true' },
-        jsx('path', {
+      return h('svg', { viewBox: '0 0 24 24', width: 18, height: 18, 'aria-hidden': 'true' },
+        h('path', {
           d: 'M12 3c-3.6 0-6.2 2.2-6.2 5.6 0 3.1 2.3 5.1 5.6 5.1 1 0 1.6-.4 1.6-1s-.6-1-1.6-1c-2.1 0-3.6-1.3-3.6-3.1 0-1.9 1.7-3.6 4.2-3.6 2.6 0 4.3 1.4 4.3 3.2 0 1.1-.6 1.9-1.4 2.6-.6.5-1 1-1 1.7 0 .7.5 1.1 1.2 1.1 1.2 0 2.4-1.6 3.1-3.2.3-.4.6-.9.8-1.4.9-1.9 1.5-4 1.5-6C20.5 5.7 17 3 12 3zM5.4 20c-.8 0-1.4.6-1.4 1.4S4.6 22.8 5.4 22.8h13.2c.8 0 1.4-.6 1.4-1.4s-.6-1.4-1.4-1.4H5.4z',
           fill: 'currentColor',
         }));
@@ -598,8 +597,8 @@ window.__ModuleLoader__.load({
         };
 
         const panel = (slotProps) => (slotProps && slotProps.view === 'summary'
-          ? jsx(SummaryText, {})
-          : jsx(QqBotPanel, { compact: true }));
+          ? h(SummaryText, {})
+          : h(QqBotPanel, { compact: true }));
 
         // Plugin page seats. Keys follow dsh-free-search: bundle seat is keyed
         // by package name, row seat by `<package name>#<row id>`.
@@ -612,8 +611,8 @@ window.__ModuleLoader__.load({
           id: PANEL_ID,
           order: 60,
           label: () => 'QQ 机器人',
-        }, () => jsx(Icon, {}));
-        safe('main', { name: 'main', key: PANEL_ID }, () => jsx(QqBotPanel, {}));
+        }, () => h(Icon, {}));
+        safe('main', { name: 'main', key: PANEL_ID }, () => h(QqBotPanel, {}));
       },
     };
   },
