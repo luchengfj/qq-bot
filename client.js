@@ -92,8 +92,12 @@ window.__ModuleLoader__.load({
             connected ? `OneBot 已连接 ${s.connections}` : '等待 NapCat 连接'),
           h(Pill, { key: 'q', kind: s.selfIds && s.selfIds.length ? 'ok' : 'warn' },
             s.selfIds && s.selfIds.length ? `已登录 QQ ${s.selfIds.join(', ')}` : '未登录 QQ'),
-          h(Pill, { key: 'l', kind: s.llm.hasKey ? 'ok' : 'warn' },
-            s.llm.hasKey ? `模型 ${s.llm.model}` : '未配置模型密钥'),
+          h(Pill, {
+            key: 'l',
+            kind: s.llm.mode === 'external' && !s.llm.hasKey ? 'warn' : 'ok',
+          }, s.llm.mode === 'external'
+            ? (s.llm.hasKey ? `外部模型 ${s.llm.model}` : '外部端点未配置密钥')
+            : `Harness 模型${s.llm.model ? ` ${s.llm.model}` : '（跟随当前选择）'}`),
         ]),
         h('dl', { className: 'qq-dl', key: 'dl' }, [
           h('dt', { key: 'd1' }, '本插件端点'),
@@ -127,9 +131,9 @@ window.__ModuleLoader__.load({
       const steps = (job && job.steps) || [];
       return h(Card, { title: 'NapCat 运行时' }, [
         h('div', { className: 'qq-row', key: 'r1' }, [
-          h(Pill, { key: 'p', ok: rt.installed }, rt.installed ? '已安装' : '未安装'),
-          h(Pill, { key: 'p2', ok: rt.running }, rt.running ? 'WebUI 在线' : 'WebUI 未连接'),
-          rt.busy ? h(Pill, { key: 'p3', ok: false }, `进行中：${rt.busy}`) : null,
+          h(Pill, { key: 'p', kind: rt.installed ? 'ok' : 'warn' }, rt.installed ? '已安装' : '未安装'),
+          h(Pill, { key: 'p2', kind: rt.running ? 'ok' : 'warn' }, rt.running ? 'WebUI 在线' : 'WebUI 未连接'),
+          rt.busy ? h(Pill, { key: 'p3', kind: 'warn' }, `进行中：${rt.busy}`) : null,
         ]),
         h('p', { className: 'qq-muted', key: 'dir' }, `安装目录：${rt.dir}`),
         rt.launcher ? h('p', { className: 'qq-muted', key: 'ln' }, `启动器：${rt.launcher}`) : null,
@@ -329,7 +333,7 @@ window.__ModuleLoader__.load({
         ]),
       }, [
         h('div', { className: 'qq-row', key: 'stats' }, [
-          h(Pill, { key: 'on', tone: mem.enabled ? 'ok' : 'warn' }, mem.enabled ? '已启用' : '已关闭'),
+          h(Pill, { key: 'on', kind: mem.enabled ? 'ok' : 'warn' }, mem.enabled ? '已启用' : '已关闭'),
           h('span', { className: 'qq-muted', key: 'n' }, `记住了 ${mem.senders} 个会话 / ${mem.facts} 条信息`),
           mem.maxHistory > 0
             ? h('span', { className: 'qq-muted', key: 'h' },
