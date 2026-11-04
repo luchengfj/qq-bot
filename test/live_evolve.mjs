@@ -33,7 +33,12 @@ function finish() {
   const help = texts.find((t) => t.indexOf('/help') >= 0 && t.indexOf('我可以做这些') >= 0);
   const status = texts.find((t) => t.indexOf('机器人运行中') >= 0);
   const memEmpty = texts.find((t) => t.indexOf('还没有记住') >= 0);
-  const newTopic = texts.find((t) => t.indexOf('话题') >= 0);
+  // The /help text itself mentions "/new 换个话题", so a plain '话题' match
+  // would falsely pass on the help reply. Require one of /new's own phrases.
+  const newTopic = texts.find((t) =>
+    t.indexOf('刚才聊的内容我已经放下了') >= 0 ||
+    t.indexOf('本来就没有进行中的话题') >= 0 ||
+    t.indexOf('好的，我们换个话题') >= 0);
 
   assert.ok(help, `/help should be answered, got: ${JSON.stringify(texts)}`);
   assert.ok(status, `/status should be answered, got: ${JSON.stringify(texts)}`);
