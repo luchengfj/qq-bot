@@ -1,0 +1,136 @@
+{
+  "format": 1,
+  "title": {
+    "en": "QQ Bot Channel — DSH Plugin Market",
+    "zh": "QQ 机器人通道 — DSH 插件市场"
+  },
+  "description": {
+    "en": "A single-bundle market index for the @local/qq-bot DSH plugin.",
+    "zh": "@local/qq-bot 插件的单条目市场索引。"
+  },
+  "metadata": {
+    "categories": {
+      "identity": {
+        "title": {
+          "en": "Identity & Communication",
+          "zh": "身份与通信"
+        }
+      }
+    },
+    "labels": {
+      "shell": {
+        "title": {
+          "en": "Runs shell commands",
+          "zh": "执行 Shell 命令"
+        }
+      },
+      "fs-write": {
+        "title": {
+          "en": "Writes files",
+          "zh": "写入文件"
+        }
+      },
+      "fs-read": {
+        "title": {
+          "en": "Reads files",
+          "zh": "读取文件"
+        }
+      },
+      "network": {
+        "title": {
+          "en": "Network access",
+          "zh": "网络访问"
+        }
+      },
+      "llm": {
+        "title": {
+          "en": "Calls models",
+          "zh": "调用模型"
+        }
+      }
+    },
+    "sortKeys": {
+      "stars": {
+        "title": {
+          "en": "Stars",
+          "zh": "星标"
+        },
+        "order": "desc"
+      },
+      "added": {
+        "title": {
+          "en": "Recently added",
+          "zh": "最近收录"
+        },
+        "order": "desc"
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "@local/qq-bot",
+      "title": "QQ 机器人通道",
+      "description": {
+        "en": "Turn DeepSeek Harness into a QQ bot channel over OneBot v11. Receives private and group messages including images through a reverse WebSocket or HTTP connection, answers with the model currently selected in Harness (no API key needed) or an OpenAI-compatible vision endpoint, and ships a built-in DSH panel for QR login, one-click NapCat installation, status, logs, conversation history and long-term per-user memory.",
+        "zh": "把 DeepSeek Harness 变成 QQ 机器人通道：基于 OneBot v11，通过反向 WebSocket / HTTP 接收私聊与群消息（含图片），默认直接调用 Harness 当前选中的模型回答（免密钥），也可切换 OpenAI 兼容视觉端点；内置 DSH 面板提供扫码登录、NapCat 一键安装与接入、状态、日志、会话上下文与按用户隔离的长期记忆。"
+      },
+      "icon": "https://raw.githubusercontent.com/luchengfj/qq-bot/main/assets/icon-180.png",
+      "author": "luchengfj",
+      "homepage": "https://github.com/luchengfj/qq-bot",
+      "repository": {
+        "url": "https://github.com/luchengfj/qq-bot"
+      },
+      "metadata": {
+        "category": "identity",
+        "keywords": [
+          "qq",
+          "onebot",
+          "onebot-v11",
+          "napcat",
+          "bot-channel",
+          "chatbot",
+          "vision",
+          "image",
+          "websocket",
+          "memory",
+          "dsh",
+          "dsh-plugin",
+          "cordis"
+        ],
+        "labels": [
+          "shell",
+          "fs-write",
+          "fs-read",
+          "network",
+          "llm"
+        ],
+        "sortKeys": {
+          "stars": 0,
+          "added": 1793799690
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "publishTimestamp": 1793799690,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/luchengfj/qq-bot",
+            "commit": "b3fdd8ee1205cbf6ecfdc7b45c4ff85c00639316"
+          },
+          "engines": {
+            "dsh": ">=0.1.7-rc.1"
+          }
+        }
+      ]
+    }
+  ],
+  "x-provenance": {
+    "source": "https://github.com/luchengfj/qq-bot",
+    "sourceUpdated": "2026-11-04",
+    "generatedAt": "2026-11-04T14:03:10.259Z",
+    "entries": 1,
+    "listed": 1,
+    "withIcon": 1
+  }
+}

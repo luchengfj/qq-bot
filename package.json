@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "QQ bot channel plugin for DeepSeek Harness — OneBot v11 reverse WebSocket/HTTP, receives images and answers questions via an OpenAI-compatible vision endpoint.",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/luchengfj/qq-bot" },
+  "keywords": ["dsh-plugin", "qq", "onebot-v11", "napcat", "chatbot", "vision", "deepseek-harness"],
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",

@@ -1,0 +1,30 @@
+{
+  "name": "@local/qq-bot",
+  "title": "QQ 机器人通道",
+  "author": "luchengfj",
+  "homepage": "https://github.com/luchengfj/qq-bot",
+  "repository": "https://github.com/luchengfj/qq-bot",
+  "icon": "https://raw.githubusercontent.com/luchengfj/qq-bot/main/assets/icon-180.png",
+  "description": {
+    "en": "Turn DeepSeek Harness into a QQ bot channel over OneBot v11. Receives private and group messages including images through a reverse WebSocket or HTTP connection, answers with the model currently selected in Harness (no API key needed) or an OpenAI-compatible vision endpoint, and ships a built-in DSH panel for QR login, one-click NapCat installation, status, logs, conversation history and long-term per-user memory.",
+    "zh": "把 DeepSeek Harness 变成 QQ 机器人通道：基于 OneBot v11，通过反向 WebSocket / HTTP 接收私聊与群消息（含图片），默认直接调用 Harness 当前选中的模型回答（免密钥），也可切换 OpenAI 兼容视觉端点；内置 DSH 面板提供扫码登录、NapCat 一键安装与接入、状态、日志、会话上下文与按用户隔离的长期记忆。"
+  },
+  "category": "identity",
+  "keywords": [
+    "qq",
+    "onebot",
+    "onebot-v11",
+    "napcat",
+    "bot-channel",
+    "chatbot",
+    "vision",
+    "image",
+    "websocket",
+    "memory",
+    "dsh",
+    "dsh-plugin",
+    "cordis"
+  ],
+  "labels": ["shell", "fs-write", "fs-read", "network", "llm"],
+  "stars": 0
+}
