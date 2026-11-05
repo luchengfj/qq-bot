@@ -18,21 +18,21 @@ function check(name, cond, extra) {
 
 const QR_URL = 'https://q.qq.com/x/abcdefghijklmnopqrstuvwxyz012345';
 
-// --- fake NapCat WebUI -------------------------------------------------------
+// --- fake NapCat WebUI (v4 envelope: {code,message,data}) -------------------
 const napcatState = { linked: null, logined: false };
 const napcat = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
-    const json = (obj) => {
-      const s = JSON.stringify(obj);
+    const json = (data, code = 0, message = 'success') => {
+      const s = JSON.stringify({ code, message, data });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(s) });
       res.end(s);
     };
     if (req.url === '/api/auth/login') return json({ Credential: Buffer.from('cred-abc').toString('base64') });
     if (req.url === '/api/test') return json({ ok: true });
     if (req.url === '/api/QQLogin/CheckLoginStatus') {
-      return json({ isLogin: napcatState.logined, online: napcatState.logined, loginPhase: '', qrcodeurl: '', loginError: '' });
+      return json({ isLogin: napcatState.logined, isOffline: !napcatState.logined, loginPhase: '', qrcodeurl: '', loginError: '' });
     }
     if (req.url === '/api/QQLogin/GetQQLoginQrcode') return json({ qrcode: QR_URL });
     if (req.url === '/api/QQLogin/GetQQLoginInfo') return json({ uin: '999001', online: napcatState.logined });
@@ -40,9 +40,10 @@ const napcat = http.createServer((req, res) => {
       return json({ network: { websocketClients: [] } });
     }
     if (req.url === '/api/OB11Config/SetConfig') {
-      // The client posts the whole config under a `config` key.
-      const payload = JSON.parse(body || '{}');
-      napcatState.linked = (payload?.config?.network?.websocketClients || [])[0] || null;
+      // v4 expects req.body.config to be a JSON *string* (json5.parse).
+      const outer = JSON.parse(body || '{}');
+      const config = typeof outer.config === 'string' ? JSON.parse(outer.config) : outer.config;
+      napcatState.linked = (config?.network?.websocketClients || [])[0] || null;
       return json({ ok: true });
     }
     res.writeHead(404); res.end('nope');

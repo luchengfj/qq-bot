@@ -32,7 +32,7 @@ const routes = makeBridgeRoutes({
   cfg, bridge, setup: null, log: () => {}, logRing: createLogRing(10), stats: createStats(), memory,
 });
 
-check('memory endpoints added', routes.length === 18, routes.length);
+check('memory endpoints added', routes.length === 19, routes.length);
 const paths = routes.map((r) => r.path);
 for (const p of ['/api/qq-bot/memory', '/api/qq-bot/memory-facts', '/api/qq-bot/memory-forget', '/api/qq-bot/memory-save', '/api/qq-bot/memory-history', '/api/qq-bot/memory-newtopic']) {
   check(`route ${p}`, paths.indexOf(p) >= 0, paths);

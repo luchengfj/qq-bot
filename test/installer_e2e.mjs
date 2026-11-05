@@ -245,8 +245,8 @@ const routes = makeBridgeRoutes({
   installer: panelInstaller,
 });
 
-check('route count is 18 after adding installer routes', () => {
-  assert.equal(routes.length, 18);
+check('route count is 19 after adding diagnose + installer routes', () => {
+  assert.equal(routes.length, 19);
 }, routes.length);
 
 const paths = routes.map((r) => r.path);

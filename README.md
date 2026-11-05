@@ -111,17 +111,16 @@ llm:
   「QQ 机器人 · 已连接/未连接 · 已登录/未登录」摘要）；
 - **侧边栏**：全局面板区会出现「QQ 机器人」图标，点开即完整面板。
 
-面板每 4 秒自动刷新，包含 7 块：
+面板每 4 秒自动刷新，按 5 个分组区块组织（概览状态徽标 + 连接与登录 +
+NapCat 运行时 + 测试与诊断 + 记忆 / 配置），响应式两栏、窄屏自动单栏：
 
 | 区块 | 内容 |
 | --- | --- |
-| 状态 | 连接数、登录 QQ、模型来源（Harness 内置 / 外部端点）、本插件端点、反向 WS 地址、NapCat 地址、消息统计（收到/已回复/失败）、记忆概况 |
-| **NapCat 运行时** | **「下载并安装 NapCat」+「启动 NapCat」，并显示安装目录/启动器/进度 —— 不用手动去 GitHub 下载** |
-| 扫码登录 + 一键接入 | 获取/刷新二维码、一键接入，二维码直接在面板里渲染 |
-| 发送测试消息 | 选群聊/私聊 + 填号 + 内容，立刻调用 `send_msg` |
-| 长期记忆 | 查看每个会话记住了什么、删除单条/整个会话/全部记忆、给某个会话「换个话题」清上下文、立即写盘 |
-| 诊断 | 测试模型连通性（走当前所选后端）、清空统计、实时日志（最近 30 条）|
-| 当前配置（只读） | 私聊/群触发规则、白名单与黑名单 |
+| 概览状态徽标 | 连接数、登录 QQ、模型来源（Harness 内置 / 外部端点）、本插件端点、反向 WS 地址、NapCat 地址、消息统计（收到/已回复/失败）、记忆概况 |
+| **连接与登录** | **三步引导：① 安装并启动 NapCat → ② 扫码登录 → ③ 一键接入**；二维码直接在面板里渲染（带倒计时）、刷新二维码 |
+| **NapCat 运行时** | **「下载并安装 NapCat」+「启动 NapCat」两阶段引导**；区分「引导包已下载 / 运行时就绪 / WebUI 在线」，显示安装目录、启动器、运行时目录、进度与错误 —— 不用手动去 GitHub 下载 |
+| **测试与诊断** | **「运行诊断」逐项自检**：OneBot 监听、WebUI 令牌、端口可达、WebUI HTTP、QQ 登录、反向 WS 连接；失败项直接给出可操作的中文提示。另有模型连通性测试、清空统计、实时日志 |
+| 记忆 / 配置 | 查看每个会话记住了什么、删除单条/整个会话/全部记忆、给某个会话「换个话题」清上下文、立即写盘；发送测试消息；当前配置（只读）|
 
 数据来自 Host 侧注册的 `/api/qq-bot/*` 路由（`lib/bridge.js`），只允许
 **本机同源**访问：`sec-fetch-site: cross-site`、Origin 与 Host 不一致、
@@ -136,25 +135,36 @@ llm:
 
 除了上面的 DSH 面板，插件还自带一个独立的控制台页面，**不用手改 NapCat 配置**：
 
-1. 先安装并启动 NapCat（需要已安装 QQNT）。**最简单的方式是用上面的 DSH 面板
-   「下载并安装 NapCat」按钮** —— 插件会自动从 GitHub 下载、解压并启动，
-   默认装到 `~/.dsh/integrations/dsh-qq/napcat`。然后记下 NapCat 启动时在
-   终端 / 日志里打印的 **WebUI 登录 token**；
-2. 在 `cordis.patch.yml` 里填写：
+1. 先安装并启动 NapCat。**最简单的方式是用上面的 DSH 面板「下载并安装
+   NapCat」按钮** —— 插件会自动从 GitHub 下载 OneKey 引导包并解压，
+   默认装到 `~/.dsh/integrations/dsh-qq/napcat`。
+   > ⚠️ OneKey 压缩包（约 1 MB）只是**引导包**，不是完整运行时。第一次点
+   > 「启动 NapCat」会先运行 `NapCatInstaller.exe` 下载真正的 Shell 运行时
+   > （QQNT + NapCat）并生成 `NapCat.*.Shell/` 目录，可能要几分钟、也可能弹窗；
+   > **完成后再点一次「启动 NapCat」** 才会真正启动并开启 WebUI（6099）。
+   > 注入 QQ 需要管理员权限，若提示权限不足请右键以管理员身份运行启动脚本。
+2. **WebUI 令牌无需手填**：NapCat 首次启动会生成随机 token 并写入
+   `.../resources/app/napcat/config/webui.json`，插件会自动扫描该文件（含
+   `NAPCAT_WEBUI_SECRET_KEY` 环境变量与 `NAPCAT_WEBUI_PREFERRED_PORT`）取到
+   token / 端口。只有想手动指定时才填 `cordis.patch.yml`：
 
    ```yaml
    napcat:
      enabled: true
-     baseUrl: 'http://127.0.0.1:6099'   # NapCat WebUI 地址
-     webuiToken: '那串token'             # ★ NapCat 的 WebUI 令牌
+     baseUrl: 'http://127.0.0.1:6099'   # 可选，自动发现会覆盖
+     webuiToken: ''                      # 留空 = 自动发现；也可手动填那串 token
    ```
 
-3. 重新加载插件（禁用 → 启用），浏览器打开 **`http://127.0.0.1:6700/setup`**；
-4. 点 **「获取二维码」** → 用手机 QQ 扫码登录；页面会每 3 秒轮询登录状态，
+   若面板「运行诊断」显示令牌未找到，点它给出的提示操作，或临时把 token 填进
+   `webuiToken` 后重新加载插件（禁用 → 启用）。
+3. 浏览器打开 **`http://127.0.0.1:6700/setup`**（或直接用 DSH 面板的「接入」页）；
+4. 点 **「获取二维码」** → 用手机 QQ 扫码登录；页面会轮询登录状态，
    二维码过期点「刷新二维码」；
-5. 点 **「一键接入」** → 插件会把反向 WS 地址写进 NapCat 的
+5. **QQ 登录成功后**再点 **「一键接入」** → 插件会把反向 WS 地址写进 NapCat 的
    `onebot11.json`（`network.websocketClients`），NapCat 随后自动连回来，
    页面上的「连接状态」变成「OneBot 已连接」。
+   > NapCat v4 的 `OB11Config` 接口要求 QQ 已登录，未登录时点「一键接入」会
+   > 明确提示「QQ 尚未登录，请先扫码」，不会静默失败。
 
 控制台接口（同源，均为 JSON）：
 
@@ -234,14 +244,15 @@ curl http://127.0.0.1:57126/api/qq-bot/status    # 需带浏览器同源头，�
 
 | 路由 | 方法 | 说明 |
 | --- | --- | --- |
-| `/api/qq-bot/status` | GET | 插件状态、NapCat/模型配置、统计、最近日志 |
+| `/api/qq-bot/status` | GET | 插件状态、NapCat/模型配置、自动发现的令牌来源、统计、最近日志 |
+| `/api/qq-bot/diagnose` | POST | **连接自检**：逐项检查 OneBot 监听 / WebUI 令牌 / 端口 / WebUI HTTP / QQ 登录 / 反向 WS，返回 `{ok,checks,hints,at}` |
 | `/api/qq-bot/log` | GET | 完整日志环（默认 200 条）|
-| `/api/qq-bot/qr` | POST | 生成登录二维码 |
+| `/api/qq-bot/qr` | POST | 生成登录二维码（令牌缺失时返回 503 + 中文 hints）|
 | `/api/qq-bot/qr.svg` | GET | 当前二维码 SVG |
 | `/api/qq-bot/login-info` | POST | 登录状态 / QQ 号 |
-| `/api/qq-bot/link` | POST | 一键写入 NapCat 反向 WS |
+| `/api/qq-bot/link` | POST | 一键写入 NapCat 反向 WS（QQ 未登录时给出明确提示）|
 | `/api/qq-bot/llm-test` | POST | 测试模型接口连通性 |
-| `/api/qq-bot/send` | POST | 发送测试消息（`{messageType,userId|groupId,text}`）|
+| `/api/qq-bot/send` | POST | 发送测试消息（`{messageType,userId\|groupId,text}`）|
 | `/api/qq-bot/stats-reset` | POST | 清空统计 |
 | `/api/qq-bot/log-clear` | POST | 清空日志 |
 | `/api/qq-bot/memory` | GET | 记忆概况 + 最近会话列表 |
@@ -250,6 +261,10 @@ curl http://127.0.0.1:57126/api/qq-bot/status    # 需带浏览器同源头，�
 | `/api/qq-bot/memory-save` | POST | 立即把记忆写入磁盘 |
 | `/api/qq-bot/memory-history` | GET | 某个会话的最近对话上下文（`?key=private:12345`）|
 | `/api/qq-bot/memory-newtopic` | POST | 清空某个会话的对话上下文（`{key}`，长期记忆保留）|
+| `/api/qq-bot/napcat-install` | POST | 后台下载并解压 NapCat OneKey 引导包 |
+| `/api/qq-bot/napcat-launch` | POST | 启动 NapCat（引导包阶段先运行安装器，运行时阶段启动 Shell）|
+
+共 19 个路由。
 
 ---
 

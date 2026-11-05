@@ -34,12 +34,16 @@ let ob11Config = {
 };
 let setConfigCalls = 0;
 
+// The fake WebUI mirrors NapCat v4.x exactly: every reply is HTTP 200 with a
+// { code, message, data } envelope, auth uses sha256(token + ".napcat"), and
+// SetConfig receives config as a JSON *string*. Asserting these here is what
+// keeps the mock honest — a flat/plain-hash mock would let a broken client pass.
 const webui = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c) => (body += c));
   req.on('end', () => {
-    const send = (obj) => {
-      const s = JSON.stringify(obj);
+    const send = (data, code = 0, message = 'success') => {
+      const s = JSON.stringify({ code, message, data });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(s) });
       res.end(s);
     };
@@ -47,22 +51,23 @@ const webui = http.createServer((req, res) => {
     if (path === '/api/test') return send({ ok: true });
     if (path === '/api/auth/login') {
       const { hash } = body ? JSON.parse(body) : {};
-      assert.equal(hash, crypto.createHash('sha256').update(WEBUI_TOKEN).digest('hex'));
+      assert.equal(hash, crypto.createHash('sha256').update(WEBUI_TOKEN + '.napcat').digest('hex'));
       return send({ Credential: Buffer.from('cred-abc').toString('base64') });
     }
     const auth = String(req.headers.authorization || '');
     if (auth !== `Bearer ${Buffer.from('cred-abc').toString('base64')}`) {
-      res.writeHead(401);
-      return res.end(JSON.stringify({ message: 'unauthorized' }));
+      return send(null, -1, 'unauthorized');
     }
     if (path === '/api/QQLogin/CheckLoginStatus') return send({ isLogin: false, isOffline: true, loginPhase: 'waiting' });
     if (path === '/api/QQLogin/GetQQLoginInfo') return send({ uin: null });
     if (path === '/api/QQLogin/GetQQLoginQrcode') return send({ qrcode: QR_URL });
     if (path === '/api/QQLogin/RefreshQRcode') return send({});
-    if (path === '/api/OB11Config/GetConfig') return send({ config: ob11Config });
+    if (path === '/api/OB11Config/GetConfig') return send(ob11Config);
     if (path === '/api/OB11Config/SetConfig') {
       setConfigCalls++;
-      ob11Config = JSON.parse(body).config;
+      const outer = body ? JSON.parse(body) : {};
+      assert.equal(typeof outer.config, 'string', 'SetConfig.config must be a JSON string');
+      ob11Config = JSON.parse(outer.config);
       return send({});
     }
     res.writeHead(404);
