@@ -106,17 +106,17 @@
         ],
         "sortKeys": {
           "stars": 0,
-          "added": 1793889060
+          "added": 1793890053
         }
       },
       "versions": [
         {
           "version": "1.0.0",
-          "publishTimestamp": 1793889060,
+          "publishTimestamp": 1793890053,
           "source": {
             "type": "git",
             "url": "https://github.com/luchengfj/qq-bot",
-            "commit": "70d02af71c9a6cb7cd98b315e15d64a7c888b73b"
+            "commit": "a40e24a02e29a5c5203903f9af93cc6d7832b4b5"
           },
           "engines": {
             "dsh": ">=0.1.7-rc.1"
@@ -128,7 +128,7 @@
   "x-provenance": {
     "source": "https://github.com/luchengfj/qq-bot",
     "sourceUpdated": "2026-11-05",
-    "generatedAt": "2026-11-05T14:41:05.330Z",
+    "generatedAt": "2026-11-05T14:49:07.673Z",
     "entries": 1,
     "listed": 1,
     "withIcon": 1
