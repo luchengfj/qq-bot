@@ -71,8 +71,8 @@
       "name": "@local/qq-bot",
       "title": "QQ 机器人通道",
       "description": {
-        "en": "Zero-download QQ bot channel plugin for DeepSeek Harness. Pure Node with no npm dependencies or installs, it provides an in-panel direct-chat test that runs the full BotLogic pipeline immediately with no QQ client and no API key (Harness-native model by default), optionally connects out to an already-running OneBot v11 forward WebSocket or accepts reverse WebSocket / HTTP POST from any existing OneBot implementation, receives images and answers questions, and keeps per-session long-term memory.",
-        "zh": "零下载的 DeepSeek Harness QQ 机器人通道插件：纯 Node、无 npm 依赖、不下载不安装任何 QQ 客户端，启用后即可在面板「① 直聊测试」里直接走完整的收图、模型作答、记忆与分段回复流程（无需 QQ 客户端、无需密钥，默认跟随 Harness 原生模型）；如需连接真实 QQ，可选填一个已经装好并正在运行的 OneBot v11 正向 WebSocket 地址，或让任意已有 OneBot 实现以反向 WebSocket / HTTP POST 连回本插件；支持接收图片答题与按会话隔离的长期记忆。"
+        "en": "Zero-download QQ bot channel plugin for DeepSeek Harness. Pure Node with no npm dependencies or installs, it provides an in-panel direct-chat test that runs the full BotLogic pipeline immediately with no QQ client and no API key (Harness-native model by default), automatically discovers local OneBot ports by scanning common forward-WebSocket ports and auto-connects when none is configured (never overwriting a manual URL, always excluding its own reverse-WS port), optionally connects out to an already-running OneBot v11 forward WebSocket or accepts reverse WebSocket / HTTP POST from any existing OneBot implementation, receives images and answers questions, and keeps per-session long-term memory.",
+        "zh": "零下载的 DeepSeek Harness QQ 机器人通道插件：纯 Node、无 npm 依赖、不下载不安装任何 QQ 客户端，启用后即可在面板「① 直聊测试」里直接走完整的收图、模型作答、记忆与分段回复流程（无需 QQ 客户端、无需密钥，默认跟随 Harness 原生模型）；新增「本机 OneBot 端口自动探测 + 自动连接」——自动扫描本机常见正向 WebSocket 端口并自动连上（无需填地址、不覆盖手工配置、自身反向 WS 端口始终排除）；如需连接真实 QQ，也可选填一个已经装好并正在运行的 OneBot v11 正向 WebSocket 地址，或让任意已有 OneBot 实现以反向 WebSocket / HTTP POST 连回本插件；支持接收图片答题与按会话隔离的长期记忆。"
       },
       "icon": "https://raw.githubusercontent.com/luchengfj/qq-bot/main/assets/icon-180.png",
       "author": "luchengfj",
@@ -86,6 +86,8 @@
           "qq",
           "onebot",
           "onebot-v11",
+          "auto-detect",
+          "port-scan",
           "zero-download",
           "direct-chat",
           "bot-channel",
@@ -107,17 +109,17 @@
         ],
         "sortKeys": {
           "stars": 0,
-          "added": 1793972581
+          "added": 1793987884
         }
       },
       "versions": [
         {
           "version": "1.0.0",
-          "publishTimestamp": 1793972581,
+          "publishTimestamp": 1793987884,
           "source": {
             "type": "git",
             "url": "https://github.com/luchengfj/qq-bot",
-            "commit": "5c8eb3bbb4f13cd6886cf3a27baceb427d14d3d8"
+            "commit": "342e9be3eb9be229478ac3c30aa61b0908a49dbf"
           },
           "engines": {
             "dsh": ">=0.1.7-rc.1"
@@ -129,7 +131,7 @@
   "x-provenance": {
     "source": "https://github.com/luchengfj/qq-bot",
     "sourceUpdated": "2026-11-06",
-    "generatedAt": "2026-11-06T13:43:01.522Z",
+    "generatedAt": "2026-11-06T17:58:04.300Z",
     "entries": 1,
     "listed": 1,
     "withIcon": 1
