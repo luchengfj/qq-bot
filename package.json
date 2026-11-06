@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Zero-download QQ bot channel plugin for DeepSeek Harness — an in-panel direct-chat test with no install, an optional connection to an already-running OneBot v11 forward/reverse WebSocket server, and the Harness-native model by default (no API key).",
+  "description": "Zero-download QQ bot channel plugin for DeepSeek Harness — automatic local OneBot port discovery and auto-connect with no address entry, an in-panel direct-chat test with no install, an optional connection to an already-running OneBot v11 forward/reverse WebSocket server, and the Harness-native model by default (no API key).",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/luchengfj/qq-bot" },
-  "keywords": ["dsh-plugin", "qq", "onebot", "onebot-v11", "zero-download", "direct-chat", "chatbot", "vision", "deepseek-harness"],
+  "keywords": ["dsh-plugin", "qq", "onebot", "onebot-v11", "auto-detect", "port-scan", "zero-download", "direct-chat", "chatbot", "vision", "deepseek-harness"],
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",

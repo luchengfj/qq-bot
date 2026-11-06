@@ -200,6 +200,8 @@ ok(result.fullText.includes('连接真实 QQ'), 'panel mentions 连接真实 QQ'
 ok(result.fullText.includes('零下载'), 'panel mentions 零下载');
 ok(result.fullText.includes('正向 WebSocket'), 'panel offers forward WS');
 ok(result.fullText.includes('反向 WS'), 'panel offers reverse WS');
+ok(result.fullText.includes('自动探测本机 OneBot 端口'), 'panel shows the auto-detect card');
+ok(result.fullText.includes('立即扫描'), 'panel shows the immediate-scan button');
 ok(!/NapCatInstaller|一键接入|下载并安装|扫码登录/.test(result.fullText),
   'no NapCat download / QR / one-click-link UI remains');
 ok(byKey('@local/qq-bot') != null, 'plugins.bundle.config seat present');

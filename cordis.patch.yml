@@ -1,102 +1,94 @@
-# QQ 机器人通道插件配置
+# @local/qq-bot — DeepSeek Harness 插件配置（「零下载」模式）
 #
-# 这是 Cordis patch 层：安装后会在 profile 中插入一个插件行，并把下面的
-# `config` 作为该行的配置传给 index.js 的 apply(ctx, config)。
-# 修改这里的配置后，需要重新启用插件（或重启 DSH）才会生效：
-#   插件管理里把 qq-bot 关闭再打开，或直接重启 Harness。
-#
-# ★ 零下载 / 零安装：插件不替你下载、安装或启动任何 QQ 客户端 ★
-#   1. 什么都不用装：启用插件后打开 DSH 面板「① 直聊测试」，直接发消息即可走
-#      完整的收图 / 模型作答 / 记忆 / 分段回复流程（Harness 模型默认，免密钥）。
-#   2. 可选连接真实 QQ（插件不会自动下载任何东西）：
-#      - 正向 WS：把「已经装好并正在运行」的 OneBot v11 正向 WS 地址填到下面
-#        forward.url（或在 DSH 面板里填），插件会主动连出去。
-#      - 反向 WS：把任意已装好的 OneBot 实现的「反向 WebSocket 客户端」地址
-#        填成  ws://127.0.0.1:6700/onebot
-#        （如果设置了 accessToken，加上 ?access_token=你的token 或 Authorization: Bearer）
-#      - HTTP POST：同一路径 /onebot 也接受 OneBot 的 HTTP 上报。
-#
+# 本插件不再下载 / 安装 / 启动 NapCat，也不再做扫码登录。
+# 两种用法：
+#   1. 面板「直聊测试」：不装任何东西，直接在 DSH 面板里发消息，验证收图、
+#      答题、记忆、指令与分段回复（走 Harness 自带模型，无需 API key）。
+#   2. 连接真实 QQ（可选）：插件作为 OneBot v11 客户端连到你已有的实现
+#      （NapCat / Lagrange / LLOneBot / go-cqhttp 等）。
+#      * 最省事：自动探测本机常见 OneBot 正向 WS 端口，找到就自动连上；
+#      * 或者手填一个正向 WS 地址（forward.url / 面板「连接已有的 OneBot 端」）；
+#      * 或者让实现端用反向 WS 连回 ws://127.0.0.1:6700/onebot。
+# 硬约束：QQ 官方没有免客户端的 HTTP 机器人 API，所以要收发真实 QQ 消息，
+# 仍需要一个已经装好并登录好的 OneBot 实现端——但本插件不会去下载它。
+# 完全零 npm 依赖，只使用 Node 内置模块。
+
 - insert:
     - id: qq-bot
       name: '@local/qq-bot'
       config:
-        # ---- OneBot 连接 ----
-        host: '0.0.0.0'          # 监听地址；只在本机用可改 '127.0.0.1'
-        port: 6700               # 监听端口
-        path: /onebot            # WebSocket / HTTP POST 路径
-        accessToken: ''          # 可选：接入令牌（留空则不校验）
-        secret: ''               # 可选：HTTP POST 上报签名密钥（HMAC-SHA1）
-        replyVia: ws             # 'ws' 通过同一 WebSocket 回复；'http' 走 httpApiBase
-        httpApiBase: ''          # replyVia=http 或 WS 不可用时的 OneBot HTTP API 地址，如 http://127.0.0.1:3000
-        httpApiToken: ''         # HTTP API 的 Bearer token（可选）
-        replyAtSender: true      # 群消息回复时是否 @发送者
-        maxImageBytes: 8388608   # 单张图片下载上限（默认 8MB）
+        # ---- 插件自带的 OneBot 服务端（反向 WS / HTTP 上报） ----
+        host: 0.0.0.0
+        port: 6700
+        path: /onebot
+        accessToken: ''
+        secret: ''
+        replyVia: ws
+        httpApiBase: ''
+        httpApiToken: ''
+        replyAtSender: true
+        maxImageBytes: 8388608
 
-        # 可选：连接一个「已经装好并正在运行」的 OneBot v11 正向 WebSocket 服务。
-        # 插件不会替你下载 / 安装 / 启动任何 QQ 客户端；留空即可只用面板直聊测试。
+        # ---- 正向 WS：插件主动连到已有的 OneBot 服务 ----
+        # 留空即可；自动探测找到后会自动填入并连接。一旦这里或面板里有手填
+        # 地址，自动探测就不会覆盖它。
         forward:
           enabled: false
           url: ''
           accessToken: ''
           reconnectMs: 5000
 
+        # ---- 本机 OneBot 端口自动探测（最省事的连接方式） ----
+        # 启动时立刻扫一轮，之后每 intervalMs 重扫；发现真实 OneBot 端且
+        # 当前没有手填地址/连接时自动连上。插件自己的监听端口永远被排除。
+        detect:
+          enabled: true
+          host: 127.0.0.1
+          ports: [3001, 3000, 5700, 8080, 6099, 3333]
+          paths: ['/', '/onebot']
+          intervalMs: 20000
+          timeoutMs: 1500
+          accessToken: ''
+          excludePorts: []
+
         # ---- 触发规则 ----
         trigger:
-          privateAlways: true    # 私聊消息是否全部响应
-          groupRequiresAt: true  # 群消息是否需要 @机器人 或 前缀才响应
-          prefix: ''             # 可选命令前缀，如 '/ai '；命中后从提示词中去除
+          privateAlways: true
+          groupRequiresAt: true
+          prefix: ''
 
-        # ---- 白名单 / 黑名单（留空=不限制）----
+        # ---- 白名单（留空 = 不限制） ----
         allow:
-          groups: []             # 只响应这些群号，如 ['123456']；空=所有群
-          users: []              # 只响应这些 QQ 号；空=所有人
-          denyUsers: []          # 屏蔽这些 QQ 号
+          groups: []
+          users: []
+          denyUsers: []
 
-        # ---- 对话 / 视觉大模型 ----
-        # mode: harness  = 直接用 Harness 里选好的模型，不需要任何密钥 ★默认★
-        # mode: external = 走 OpenAI 兼容端点，需要填 apiKey
+        # ---- 模型：默认用 Harness 自带模型，无需 key ----
         llm:
-          mode: harness           # 'harness'（推荐，免密钥）或 'external'
-          # 下面三项只在 mode: harness 时生效，且都可以留空：
-          # 留空 = 跟随 Harness 当前选择的模型；填写则强制指定。
-          provider: ''            # 例：'deepseek'
-          reasoningEffort: ''     # 例：'low' / 'medium' / 'high'（模型支持时）
+          mode: harness
+          provider: ''
+          reasoningEffort: ''
           temperature: 0.4
-          # 以下是 mode: external 才用到的 OpenAI 兼容端点配置
-          # 默认用阿里云百炼 DashScope 的 OpenAI 兼容模式。
-          # 任何 OpenAI 兼容端点都能用：OpenAI、DeepSeek、本地 vLLM/Ollama 等。
-          baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-          apiKey: ''             # mode: external 时必填（本地无鉴权网关可留空）
-          model: ''              # 模型名：mode: external 留空则默认 qwen-vl-max-latest；
-                                 # mode: harness 请保持留空，否则会强制指定该模型
+          baseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+          apiKey: ''
+          textOnlyFallbackOnVision: true
+          model: ''
           systemPrompt: '你是 QQ 群里的智能助手，请用简洁、友好的中文回答用户的问题；当用户发来图片时，请描述图片并针对图片内容作答。'
           maxTokens: 1024
           timeoutMs: 60000
-          # 单条回复的最大字数（0 = 不限制）。QQ 单条消息过长会被截断，
-          # 建议 300~800。超出时会自动拆成多条发送（不再直接截断丢内容）。
-          maxReplyChars: 600
-          # 一条回复最多拆成几条发送（1 = 不拆分，直接截断）。
-          maxReplyParts: 4
-          # 图片 SSRF 防护：默认禁止下载内网 / 本机 / 云元数据地址的图片。
-          # 只有当你的图片确实来自局域网（如自建图床）时才设为 true。
           allowPrivateImages: false
+          maxReplyChars: 0
+          maxReplyParts: 4
 
-        # ---- 长期记忆（按会话记录，可持久化）----
-        # 机器人会记住用户说过的关键信息（"我叫小明"、"我喜欢咖啡"），
-        # 之后的对话会自然带上这些信息。私聊与群聊的记忆互相隔离。
-        # 用户在 QQ 里发「我的记忆」可查看，发「忘记我」可清除。
+        # ---- 长期记忆 ----
         memory:
-          enabled: true          # false 则完全关闭记忆功能
-          maxFacts: 60           # 每个用户最多记住多少条
-          maxFactChars: 120      # 单条记忆的最大长度
-          maxReplies: 30         # 保留最近多少条回复（用于避免重复回答）
-          # ---- 对话上下文（"刚才聊了什么"）----
-          # 与上面的长期记忆不同：这是最近几轮的真实问答，让机器人能接住
-          # "那它呢？"这类指代；静默一段时间后自动清空，不会被当成长期知识。
-          maxHistory: 12         # 每个会话保留最近多少轮（0 = 关闭上下文）
-          maxHistoryChars: 300   # 单轮内容最长记多少字
-          historyTtlMinutes: 30  # 静默多少分钟就当作新话题
-          ttlDays: 30            # 多久没说话就遗忘长期记忆（天）
-          file: ''               # ★ 持久化文件路径；留空则只在内存里（重启即失效）
-                                 # 例：file: 'C:/Users/你的用户名/.dsh/qq-bot-memory.json'
-          autoSaveMs: 15000      # 有新记忆后多久写一次磁盘
+          enabled: true
+          maxFacts: 60
+          maxFactChars: 120
+          maxReplies: 30
+          maxHistory: 12
+          maxHistoryChars: 300
+          historyTtlMinutes: 30
+          ttlDays: 30
+          file: ''
+          autoSaveMs: 15000

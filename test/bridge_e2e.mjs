@@ -54,7 +54,28 @@ const STORE_PATH = 'qq-bot/test/_bridge_forward_store.json';
 const forward = new ForwardManager(bridge, log, { storePath: STORE_PATH });
 forward.init(cfg.forward);
 
-const routes = makeBridgeRoutes({ cfg, bridge, log, logRing, stats, simulator, forward, memory: stubLogic.memory });
+// A faithful detector stub: the routes only use info/scanNow/setEnabled.
+const detectState = { enabled: true, status: 'idle' };
+const detector = {
+  info() {
+    return {
+      enabled: detectState.enabled, running: false, scanning: false,
+      status: detectState.status, lastScanAt: 0, lastFound: null, candidates: [],
+      ports: [3001, 3000], paths: ['/', '/onebot'], excludedPorts: [port],
+      intervalMs: 20000, timeoutMs: 1500, host: '127.0.0.1',
+    };
+  },
+  async scanNow() {
+    return { ok: true, detect: this.info(), hits: [] };
+  },
+  setEnabled(value) {
+    detectState.enabled = value !== false;
+    detectState.status = detectState.enabled ? 'idle' : 'disabled';
+    return this.info();
+  },
+};
+
+const routes = makeBridgeRoutes({ cfg, bridge, log, logRing, stats, simulator, forward, detector, memory: stubLogic.memory });
 
 // A bare server that mimics ctx.webServer: routes registered here, so requests
 // arrive with a loopback remoteAddress, exactly like the real Web UI.
@@ -97,6 +118,8 @@ stats.received = 3; stats.answered = 2; stats.failed = 1; stats.lastError = 'boo
   check('status.chat.messages is array', s.chat && Array.isArray(s.chat.messages), JSON.stringify(s.chat));
   check('status.reverseUrl is GONE (zero-download)', s.reverseUrl === undefined, JSON.stringify(Object.keys(s)));
   check('status.napcat is GONE (zero-download)', s.napcat === undefined, JSON.stringify(Object.keys(s)));
+  check('status.detect is present', s.detect && s.detect.enabled === true && Array.isArray(s.detect.ports), JSON.stringify(s.detect));
+  check('detect routes registered', routeMap.has('/api/qq-bot/detect-scan') && routeMap.has('/api/qq-bot/detect-config'), [...routeMap.keys()]);
 }
 
 // --- 2. guard rules ----------------------------------------------------------
@@ -149,6 +172,18 @@ stats.received = 3; stats.answered = 2; stats.failed = 1; stats.lastError = 'boo
   check('POST /forward-disconnect -> ok', off.status === 200 && off.data && off.data.ok === true && off.data.forward.connected === false, JSON.stringify(off.data));
   const st = await req('/api/qq-bot/status');
   check('status.forward.disabled after disconnect', st.data && st.data.forward && st.data.forward.enabled === false, JSON.stringify(st.data && st.data.forward));
+}
+
+// --- 4b. auto-detect routes (zero-download convenience) ---------------------
+{
+  const scan = await req('/api/qq-bot/detect-scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  check('POST /detect-scan -> ok with detect+hits', scan.status === 200 && scan.data && scan.data.ok === true && scan.data.detect && Array.isArray(scan.data.hits), JSON.stringify(scan.data));
+  const wrongMethod = await req('/api/qq-bot/detect-scan');
+  check('guard rejects GET on /detect-scan', wrongMethod.status === 405, `status=${wrongMethod.status}`);
+  const off = await req('/api/qq-bot/detect-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false }) });
+  check('POST /detect-config disables detection', off.status === 200 && off.data && off.data.ok === true && off.data.detect.enabled === false, JSON.stringify(off.data));
+  const on = await req('/api/qq-bot/detect-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true }) });
+  check('POST /detect-config re-enables detection', on.status === 200 && on.data && on.data.detect.enabled === true, JSON.stringify(on.data));
 }
 
 // --- 5. diagnose (6 checks, no NapCat WebUI probes) --------------------------

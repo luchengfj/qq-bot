@@ -12,6 +12,7 @@ import { OneBotBridge } from './lib/onebot.js';
 import { BotLogic, normalizeConfig } from './lib/bot.js';
 import { makeBridgeRoutes, createLogRing, createStats } from './lib/bridge.js';
 import { ForwardManager } from './lib/forward.js';
+import { AutoDetector } from './lib/detect.js';
 import { ChatSimulator } from './lib/simulator.js';
 
 export const name = '@local/qq-bot';
@@ -78,6 +79,16 @@ export function apply(ctx, config) {
   forward.init(cfg.forward);
   forward.on('connected', () => log('真实 QQ 通道已就绪（正向 WebSocket）'));
 
+  // Auto-detect an already-running OneBot v11 server on the local machine by
+  // probing common ports. It NEVER overwrites a manually configured forward
+  // URL, and always excludes our own listening port to avoid echo loops.
+  const detector = new AutoDetector(forward, log, { selfPort: cfg.port });
+  detector.init(cfg.detect);
+  detector.start();
+  detector.on('found', (hit) =>
+    log(`自动探测到本机 OneBot 端 ${hit.url}，已自动连接`),
+  );
+
   // In-panel direct chat: exercises the same BotLogic pipeline as real QQ
   // messages, without requiring any external software.
   const simulator = new ChatSimulator(logic, log, { memory: logic.memory });
@@ -116,6 +127,7 @@ export function apply(ctx, config) {
         memory: logic.memory,
         forward,
         simulator,
+        detector,
         llm: logic.llm,
         agentDefaultModel: logic.agentDefaultModel,
         attachments: logic.attachments,
@@ -148,6 +160,7 @@ export function apply(ctx, config) {
       log('正在关闭 QQ 机器人通道…');
       // Flush long-term memory before the process/plugin goes away.
       try { logic.dispose(); } catch { /* ignore */ }
+      detector.dispose();
       forward.dispose();
       bridge.stop().catch((err) => log(`关闭时出错: ${err.message}`));
     };
@@ -166,5 +179,5 @@ export function apply(ctx, config) {
     return disposer;
   }, 'qq-bot: OneBot 服务');
 
-  log('插件已加载（零下载模式）。可直接在 DSH 面板「直聊测试」里发消息；接真实 QQ 只需填一个已有的 OneBot 正向 WebSocket 地址。');
+  log('插件已加载（零下载模式）。可直接在 DSH 面板「直聊测试」里发消息；本机 OneBot 端口自动探测已启动，发现已有实现端会自动连上，也可手填正向 WebSocket 地址。');
 }

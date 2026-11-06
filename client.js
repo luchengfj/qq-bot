@@ -257,6 +257,65 @@ window.__ModuleLoader__.load({
       reverse: '反向已连接',
     };
 
+    const DETECT_STATUS_LABELS = {
+      idle: '待机 · 未发现',
+      disabled: '已关闭',
+      scanning: '扫描中…',
+      found: '已发现并自动连接',
+      error: '扫描出错',
+    };
+
+    function DetectPanel({ state }) {
+      const det = (state.status && state.status.detect) || {};
+      const enabled = det.enabled !== false;
+      const hits = det.candidates || [];
+      const ports = det.ports || [];
+      const excluded = det.excludedPorts || [];
+      const label = DETECT_STATUS_LABELS[det.status] || det.status || '未启用';
+      const kind = !enabled ? 'neutral'
+        : (det.status === 'found' ? 'ok'
+          : (det.status === 'error' ? 'err'
+            : (det.status === 'scanning' ? 'info' : 'info')));
+      return h(Card, {
+        title: '自动探测本机 OneBot 端口（最省事）', icon: '🔎',
+        extra: h(Pill, { key: 'p', kind }, label),
+      }, [
+        h('p', { className: 'qq-muted', key: 'd' },
+          '插件启动时会扫一遍本机常见 OneBot 正向 WebSocket 端口，发现已登录的实现端就自动连上，连地址都不用手填。手填的正向地址永远优先，不会被覆盖；插件自己的端口会自动排除，避免连回自己。'),
+        h('div', { className: 'qq-row', key: 'b' }, [
+          h(Button, {
+            key: 's', disabled: det.scanning || state.busy === 'detectScan',
+            loading: state.busy === 'detectScan',
+            onClick: () => state.action('detectScan'),
+          }, '立即扫描'),
+          h(Button, {
+            key: 't', ghost: true, danger: enabled,
+            disabled: state.busy === 'detectConfig',
+            onClick: () => state.action('detectConfig', { enabled: !enabled }),
+          }, enabled ? '关闭自动探测' : '开启自动探测'),
+        ]),
+        h('div', { className: 'qq-kv-list', key: 'kv' }, [
+          h(KV, { k: '探测端口', key: 'p' }, h('code', null, ports.join(', ') || '—')),
+          h(KV, { k: '排除端口', key: 'e' }, h('code', null, excluded.join(', ') || '—')),
+          h(KV, { k: '扫描间隔', key: 'i' }, h('code', null, `${Math.round((det.intervalMs || 20000) / 1000)} 秒`)),
+          h(KV, { k: '上次扫描', key: 'l' }, h('code', null,
+            det.lastScanAt ? new Date(det.lastScanAt).toLocaleTimeString() : '尚未扫描')),
+        ]),
+        hits.length
+          ? h('div', { className: 'qq-kv-list', key: 'hits' },
+              hits.slice(0, 6).map((c, i) =>
+                h(KV, { k: `候选 ${i + 1}`, key: `h${i}` }, [
+                  h(Dot, { key: 'd', tone: 'ok' }),
+                  h('code', { key: 'u' }, `${c.url}${c.appName ? ` · ${c.appName}` : ''}`),
+                ])))
+          : h('p', { className: 'qq-muted', key: 'none' },
+              '暂未发现本机 OneBot 端。接真实 QQ 也可以直接用下面的手填地址 / 反向 WS；不接也能在「① 直聊测试」里聊天。'),
+        det.lastFound && det.lastFound.url
+          ? h('p', { className: 'qq-muted', key: 'lf' }, `上次命中：${det.lastFound.url}（${det.lastFound.appName || 'OneBot'}）`)
+          : null,
+      ]);
+    }
+
     function ForwardPanel({ state }) {
       const fwd = (state.status && state.status.forward) || {};
       const [url, setUrl] = React.useState('');
@@ -681,6 +740,20 @@ window.__ModuleLoader__.load({
             await post('/forward-disconnect', {});
             setNotice('正向 WebSocket 已断开。');
             refresh();
+          } else if (name === 'detectScan') {
+            result = await post('/detect-scan', {});
+            setNotice(result.ok
+              ? (result.hits && result.hits.length
+                ? `扫描完成，发现 ${result.hits.length} 个 OneBot 端。`
+                : '扫描完成，暂未发现本机 OneBot 端。')
+              : `扫描失败：${result.error}`);
+            refresh();
+          } else if (name === 'detectConfig') {
+            result = await post('/detect-config', payload);
+            setNotice(result.ok
+              ? `本机 OneBot 自动探测已${payload && payload.enabled ? '开启' : '关闭'}。`
+              : `设置失败：${result.error}`);
+            refresh();
           } else if (name === 'send') {
             await post('/send', payload);
             setNotice('已发送。');
@@ -738,6 +811,9 @@ window.__ModuleLoader__.load({
         h(Pill, { key: 'm', kind: (llm.mode === 'external' && !llm.hasKey) ? 'warn' : (llm.model ? 'info' : 'neutral') },
           llm.mode === 'external' ? `模型 · 外部 ${llm.model || '未配置'}` : `模型 · ${llm.model || 'Harness'}`),
         h(Pill, { key: 'z', kind: 'ok' }, '零下载 · 无需安装'),
+        h(Pill, { key: 'd', kind: (s.detect && s.detect.enabled === false) ? 'neutral' : 'info' },
+          (s.detect && s.detect.status === 'found') ? '自动探测 · 已连接'
+            : ((s.detect && s.detect.enabled === false) ? '自动探测 · 关闭' : '自动探测 · 已开启')),
         h(Pill, { key: 'r', kind: mem.enabled ? 'ok' : 'neutral' },
           mem.enabled ? `记忆 · ${mem.facts || 0} 条` : '记忆 · 关闭'),
       ]);
@@ -811,8 +887,9 @@ window.__ModuleLoader__.load({
           }, h(ChatPanel, { key: 'chat', state })),
           h(Section, {
             key: 'sec-real', icon: '🔌', title: '② 连接真实 QQ（可选）',
-            desc: '插件不下载不安装：填一个已有的 OneBot 正向 WS 地址，或让它反向连回来',
+            desc: '插件不下载不安装：自动探测本机 OneBot 端口，或手填正向 WS 地址 / 让它反向连回来',
           }, [
+            h(DetectPanel, { key: 'det', state }),
             h(ForwardPanel, { key: 'fwd', state }),
             h(ReversePanel, { key: 'rev', state }),
             h(SendPanel, { key: 'send', state }),

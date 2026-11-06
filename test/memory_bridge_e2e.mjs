@@ -32,12 +32,13 @@ const routes = makeBridgeRoutes({
   cfg, bridge, log: () => {}, logRing: createLogRing(10), stats: createStats(), memory,
 });
 
-// 17 routes in zero-download mode: status, diagnose, log, chat, chat-clear,
-// forward-config, forward-disconnect, llm-test, send, stats-reset, log-clear
-// and the six memory/* endpoints. (NapCat QR/link/install/launch are gone.)
-check('route count is 17 in zero-download mode', routes.length === 17, routes.length);
+// 19 routes in zero-download mode: status, diagnose, log, chat, chat-clear,
+// forward-config, forward-disconnect, detect-scan, detect-config, llm-test,
+// send, stats-reset, log-clear and the six memory/* endpoints.
+// (NapCat QR/link/install/launch are gone.)
+check('route count is 19 in zero-download mode', routes.length === 19, routes.length);
 const paths = routes.map((r) => r.path);
-for (const p of ['/api/qq-bot/chat', '/api/qq-bot/chat-clear', '/api/qq-bot/forward-config', '/api/qq-bot/forward-disconnect', '/api/qq-bot/diagnose']) {
+for (const p of ['/api/qq-bot/chat', '/api/qq-bot/chat-clear', '/api/qq-bot/forward-config', '/api/qq-bot/forward-disconnect', '/api/qq-bot/detect-scan', '/api/qq-bot/detect-config', '/api/qq-bot/diagnose']) {
   check(`zero-download route ${p}`, paths.indexOf(p) >= 0, paths);
 }
 for (const p of ['/api/qq-bot/qr', '/api/qq-bot/link', '/api/qq-bot/napcat-install', '/api/qq-bot/napcat-launch']) {
