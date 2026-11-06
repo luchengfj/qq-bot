@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "QQ Bot Channel",
-    "description": "OneBot v11 QQ bot channel. Receives QQ messages and images and answers through an OpenAI-compatible chat/vision endpoint. Keeps long-term per-user memory plus a short-term conversation window (so follow-ups like \"and that one?\" work; it resets after silence), splits long replies into several messages instead of truncating, and answers /help, /status, /new, /memory, /forget. Ships a DSH panel for status, QR-code login, one-click wiring, test messages, memory management and logs, plus a standalone /setup console."
+    "description": "Zero-download OneBot v11 QQ bot channel for DeepSeek Harness. Works immediately in the built-in DSH panel: the 直聊测试 (direct-chat) box exercises the full pipeline for text and images with no QQ client, no token and no API key (the Harness-selected model is used by default). Optionally connects to any already-running OneBot v11 implementation through a forward WebSocket, a reverse WebSocket, or HTTP POST — the plugin never downloads or installs anything for you. Keeps long-term per-user memory plus a short-term conversation window (follow-ups like \"and that one?\" work; it resets after silence), splits long replies into several messages, and answers /help, /status, /new, /memory, /forget. The panel also shows status, self-checks, memory management and logs."
   }
 }

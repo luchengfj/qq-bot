@@ -5,15 +5,16 @@
 # 修改这里的配置后，需要重新启用插件（或重启 DSH）才会生效：
 #   插件管理里把 qq-bot 关闭再打开，或直接重启 Harness。
 #
-# ★ 最简接入流程（扫码登录，无需手改 NapCat 配置）★
-#   1. 启动 NapCat（已安装 QQNT），记下它终端里打印的 WebUI token
-#   2. 把该 token 填到下面的 napcat.webuiToken
-#   3. 关闭再启用本插件，浏览器打开 http://127.0.0.1:6700/setup
-#   4. 点「获取二维码」用手机 QQ 扫码 → 点「一键接入」
-#
-# 手动接入方式：NapCatQQ / Lagrange.Core / LLOneBot 配置「反向 WebSocket」客户端
-#   地址  ws://127.0.0.1:6700/onebot
-#   （如果设置了 accessToken，加上 ?access_token=你的token 或 Authorization: Bearer）
+# ★ 零下载 / 零安装：插件不替你下载、安装或启动任何 QQ 客户端 ★
+#   1. 什么都不用装：启用插件后打开 DSH 面板「① 直聊测试」，直接发消息即可走
+#      完整的收图 / 模型作答 / 记忆 / 分段回复流程（Harness 模型默认，免密钥）。
+#   2. 可选连接真实 QQ（插件不会自动下载任何东西）：
+#      - 正向 WS：把「已经装好并正在运行」的 OneBot v11 正向 WS 地址填到下面
+#        forward.url（或在 DSH 面板里填），插件会主动连出去。
+#      - 反向 WS：把任意已装好的 OneBot 实现的「反向 WebSocket 客户端」地址
+#        填成  ws://127.0.0.1:6700/onebot
+#        （如果设置了 accessToken，加上 ?access_token=你的token 或 Authorization: Bearer）
+#      - HTTP POST：同一路径 /onebot 也接受 OneBot 的 HTTP 上报。
 #
 - insert:
     - id: qq-bot
@@ -31,18 +32,13 @@
         replyAtSender: true      # 群消息回复时是否 @发送者
         maxImageBytes: 8388608   # 单张图片下载上限（默认 8MB）
 
-        # ---- NapCat 扫码登录 / 一键接入（内置控制台）----
-        # 启动插件后打开 http://127.0.0.1:6700/setup 即可扫码登录并一键接入。
-        napcat:
-          enabled: true              # false 则关闭内置控制台的 NapCat 联动
-          baseUrl: 'http://127.0.0.1:6099'  # NapCat WebUI 地址
-          webuiToken: ''             # ★ NapCat WebUI 登录令牌（NapCat 启动日志/终端里显示的那串 token）
-          reverseHost: '127.0.0.1'   # 让 NapCat 连回本插件时用的地址
-          reversePort: 6700          # 让 NapCat 连回本插件时用的端口
-          timeoutMs: 15000
-          # ---- 托管运行时：面板可自行下载并启动 NapCat ----
-          napcatDir: ''              # 留空= ~/.dsh/integrations/dsh-qq/napcat
-          webuiPort: 6099            # NapCat WebUI 端口（用于检测是否已启动）
+        # 可选：连接一个「已经装好并正在运行」的 OneBot v11 正向 WebSocket 服务。
+        # 插件不会替你下载 / 安装 / 启动任何 QQ 客户端；留空即可只用面板直聊测试。
+        forward:
+          enabled: false
+          url: ''
+          accessToken: ''
+          reconnectMs: 5000
 
         # ---- 触发规则 ----
         trigger:

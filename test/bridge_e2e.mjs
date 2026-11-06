@@ -1,12 +1,15 @@
-// Exercises lib/bridge.js end-to-end against a real OneBotBridge + SetupConsole:
-// status shape, guard rules, QR handing, link, stats reset, outgoing params.
+// Exercises lib/bridge.js end-to-end in ZERO-DOWNLOAD mode against a real
+// OneBotBridge + ChatSimulator + ForwardManager: status shape, guard rules,
+// chat, forward config, stats reset, outgoing params, llm-test and diagnose.
 // Run: node test/bridge_e2e.mjs
 
 import http from 'node:http';
 import net from 'node:net';
+import fs from 'node:fs';
 import { makeBridgeRoutes, createLogRing, createStats, buildOutgoingParams, isBridgeRequestAllowed } from '../lib/bridge.js';
 import { OneBotBridge } from '../lib/onebot.js';
-import { SetupConsole } from '../lib/setup.js';
+import { ChatSimulator } from '../lib/simulator.js';
+import { ForwardManager } from '../lib/forward.js';
 import { normalizeConfig } from '../lib/bot.js';
 
 const results = [];
@@ -16,42 +19,6 @@ function check(name, cond, extra) {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${!ok && extra ? ' :: ' + extra : ''}`);
 }
 
-const QR_URL = 'https://q.qq.com/x/abcdefghijklmnopqrstuvwxyz012345';
-
-// --- fake NapCat WebUI (v4 envelope: {code,message,data}) -------------------
-const napcatState = { linked: null, logined: false };
-const napcat = http.createServer((req, res) => {
-  let body = '';
-  req.on('data', (c) => { body += c; });
-  req.on('end', () => {
-    const json = (data, code = 0, message = 'success') => {
-      const s = JSON.stringify({ code, message, data });
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(s) });
-      res.end(s);
-    };
-    if (req.url === '/api/auth/login') return json({ Credential: Buffer.from('cred-abc').toString('base64') });
-    if (req.url === '/api/test') return json({ ok: true });
-    if (req.url === '/api/QQLogin/CheckLoginStatus') {
-      return json({ isLogin: napcatState.logined, isOffline: !napcatState.logined, loginPhase: '', qrcodeurl: '', loginError: '' });
-    }
-    if (req.url === '/api/QQLogin/GetQQLoginQrcode') return json({ qrcode: QR_URL });
-    if (req.url === '/api/QQLogin/GetQQLoginInfo') return json({ uin: '999001', online: napcatState.logined });
-    if (req.url === '/api/OB11Config/GetConfig') {
-      return json({ network: { websocketClients: [] } });
-    }
-    if (req.url === '/api/OB11Config/SetConfig') {
-      // v4 expects req.body.config to be a JSON *string* (json5.parse).
-      const outer = JSON.parse(body || '{}');
-      const config = typeof outer.config === 'string' ? JSON.parse(outer.config) : outer.config;
-      napcatState.linked = (config?.network?.websocketClients || [])[0] || null;
-      return json({ ok: true });
-    }
-    res.writeHead(404); res.end('nope');
-  });
-});
-await new Promise((r) => napcat.listen(0, '127.0.0.1', r));
-const napcatPort = napcat.address().port;
-
 // --- plugin bridge under test ------------------------------------------------
 const port = 6700 + Math.floor(Math.random() * 400);
 const cfg = normalizeConfig({
@@ -59,7 +26,7 @@ const cfg = normalizeConfig({
   port,
   path: '/onebot',
   accessToken: 'tok-123',
-  napcat: { enabled: true, baseUrl: `http://127.0.0.1:${napcatPort}`, webuiToken: 'napcat-token', reverseHost: '127.0.0.1', reversePort: port, timeoutMs: 20000 },
+  forward: { enabled: false, url: '', accessToken: '', reconnectMs: 5000 },
   llm: { baseUrl: 'http://127.0.0.1:1/v1', apiKey: 'sk-test', model: 'test-model', timeoutMs: 5000 },
 });
 const logRing = createLogRing(10);
@@ -69,9 +36,25 @@ const log = (m) => { logs.push(String(m)); logRing.push(m); };
 
 const bridge = new OneBotBridge(cfg);
 await bridge.start();
-const setup = new SetupConsole(cfg, bridge, log);
 
-const routes = makeBridgeRoutes({ cfg, bridge, setup, log, logRing, stats });
+// A stub "logic" that records the event and replies through replyFn, so the
+// /chat route exercises the REAL ChatSimulator -> BotLogic.handle contract
+// without needing a model endpoint.
+const seen = [];
+const stubLogic = {
+  memory: { clearHistory() {}, stats() { return { facts: 0, senders: 0 }; } },
+  async handle(event, replyFn) {
+    seen.push({ event, context: arguments[2] });
+    await replyFn('面板测试回复');
+    return { ok: true };
+  },
+};
+const simulator = new ChatSimulator(stubLogic, log, { memory: stubLogic.memory });
+const STORE_PATH = 'qq-bot/test/_bridge_forward_store.json';
+const forward = new ForwardManager(bridge, log, { storePath: STORE_PATH });
+forward.init(cfg.forward);
+
+const routes = makeBridgeRoutes({ cfg, bridge, log, logRing, stats, simulator, forward, memory: stubLogic.memory });
 
 // A bare server that mimics ctx.webServer: routes registered here, so requests
 // arrive with a loopback remoteAddress, exactly like the real Web UI.
@@ -104,12 +87,16 @@ stats.received = 3; stats.answered = 2; stats.failed = 1; stats.lastError = 'boo
   check('status.plugin', s.plugin === '@local/qq-bot', String(s.plugin));
   check('status.started', s.started === true, String(s.started));
   check('status.endpoint', s.endpoint && s.endpoint.port === port, JSON.stringify(s.endpoint));
-  check('status.reverseUrl contains port', String(s.reverseUrl).includes(String(port)), String(s.reverseUrl));
-  check('status.reverseUrl carries token', String(s.reverseUrl).includes('access_token=tok-123'), String(s.reverseUrl));
-  check('status.napcat.hasToken', s.napcat && s.napcat.hasToken === true, JSON.stringify(s.napcat));
+  check('status.endpoint.reverseWsUrl contains port', String(s.endpoint && s.endpoint.reverseWsUrl).includes(String(port)), JSON.stringify(s.endpoint));
+  check('status.mode standalone', s.mode === 'standalone', String(s.mode));
+  check('status.forward.enabled false', s.forward && s.forward.enabled === false, JSON.stringify(s.forward));
+  check('status.forward.status idle', s.forward && s.forward.status === 'idle', JSON.stringify(s.forward));
   check('status.llm.hasKey', s.llm && s.llm.hasKey === true, JSON.stringify(s.llm));
   check('status.stats', s.stats && s.stats.received === 3 && s.stats.answered === 2 && s.stats.failed === 1, JSON.stringify(s.stats));
   check('status.log carries ring', Array.isArray(s.log) && s.log.some((entry) => entry && entry.message === 'hello'), JSON.stringify(s.log));
+  check('status.chat.messages is array', s.chat && Array.isArray(s.chat.messages), JSON.stringify(s.chat));
+  check('status.reverseUrl is GONE (zero-download)', s.reverseUrl === undefined, JSON.stringify(Object.keys(s)));
+  check('status.napcat is GONE (zero-download)', s.napcat === undefined, JSON.stringify(Object.keys(s)));
 }
 
 // --- 2. guard rules ----------------------------------------------------------
@@ -134,41 +121,47 @@ stats.received = 3; stats.answered = 2; stats.failed = 1; stats.lastError = 'boo
     socket.on('error', () => resolve(''));
   });
   check('guard rejects non-loopback host', raw.includes('403'), raw.split('\r\n')[0] || 'no response');
-  const wrongMethod = await req('/api/qq-bot/qr');
+  const wrongMethod = await req('/api/qq-bot/chat');
   check('guard rejects GET on POST route', wrongMethod.status === 405, `status=${wrongMethod.status}`);
 }
 
-// --- 3. qr flow --------------------------------------------------------------
+// --- 3. chat (the zero-download headline feature) ----------------------------
 {
-  const r = await req('/api/qq-bot/qr', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-  check('POST /qr -> 200', r.status === 200, JSON.stringify(r.data));
-  check('POST /qr returns url', r.data && r.data.qr && r.data.qr.url === QR_URL, JSON.stringify(r.data));
-  const svg = await req('/api/qq-bot/qr.svg');
-  check('GET /qr.svg -> svg', svg.status === 200 && String(svg.headers.get('content-type')).includes('svg') && svg.text.includes('<svg'), `status=${svg.status}`);
-  check('qr cached on setup', Boolean(setup.qr && setup.qr.svg), 'none');
+  const r = await req('/api/qq-bot/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: '你好' }) });
+  check('POST /chat -> 200', r.status === 200, JSON.stringify(r.data));
+  check('POST /chat ok + reply', r.data && r.data.ok === true && r.data.replies.some((m) => String(m).includes('面板测试回复')), JSON.stringify(r.data));
+  check('POST /chat returns transcript history', r.data && Array.isArray(r.data.history) && r.data.history.length >= 2, JSON.stringify(r.data && r.data.history));
+  check('stub logic saw a OneBot v11 private event', seen.length === 1 && seen[0].event.post_type === 'message' && seen[0].event.message_type === 'private' && seen[0].event.user_id === 10001, JSON.stringify(seen[0] && seen[0].event));
+  check('stub logic saw context.hint (panel chat)', seen[0] && seen[0].context && String(seen[0].context.hint).includes('面板'), JSON.stringify(seen[0] && seen[0].context));
+  const empty = await req('/api/qq-bot/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: '' }) });
+  check('POST /chat rejects empty text', empty.status === 200 && empty.data && empty.data.ok === false, JSON.stringify(empty.data));
+  const after = await req('/api/qq-bot/status');
+  check('status.chat.messages reflects chat', after.data && after.data.chat && after.data.chat.messages.length >= 2, JSON.stringify(after.data && after.data.chat));
+  const cleared = await req('/api/qq-bot/chat-clear', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+  check('POST /chat-clear empties transcript', cleared.status === 200 && cleared.data && cleared.data.ok === true && cleared.data.history.length === 0, JSON.stringify(cleared.data));
 }
 
-// --- 4. login-info -----------------------------------------------------------
+// --- 4. forward config (real QQ is OPTIONAL and never downloaded) ------------
 {
-  napcatState.logined = true;
-  const r = await req('/api/qq-bot/login-info', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-  check('POST /login-info isLogin', r.status === 200 && r.data && r.data.isLogin === true, JSON.stringify(r.data));
-  const r2 = await req('/api/qq-bot/qr', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-  check('POST /qr says logined when online', r2.data && r2.data.logined === true, JSON.stringify(r2.data));
-  napcatState.logined = false;
+  const bad = await req('/api/qq-bot/forward-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'http://bad' }) });
+  check('POST /forward-config rejects http://', bad.status === 200 && bad.data && bad.data.ok === false, JSON.stringify(bad.data));
+  const off = await req('/api/qq-bot/forward-disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+  check('POST /forward-disconnect -> ok', off.status === 200 && off.data && off.data.ok === true && off.data.forward.connected === false, JSON.stringify(off.data));
+  const st = await req('/api/qq-bot/status');
+  check('status.forward.disabled after disconnect', st.data && st.data.forward && st.data.forward.enabled === false, JSON.stringify(st.data && st.data.forward));
 }
 
-// --- 5. link -----------------------------------------------------------------
+// --- 5. diagnose (6 checks, no NapCat WebUI probes) --------------------------
 {
-  const r = await req('/api/qq-bot/link', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-  check('POST /link -> 200', r.status === 200 && r.data && r.data.ok === true, JSON.stringify(r.data));
-  check('POST /link wrote ws client', Boolean(napcatState.linked && napcatState.linked.enable === true), JSON.stringify(napcatState.linked));
-  check('POST /link url matches reverseUrl', napcatState.linked && napcatState.linked.url === setup.reverseUrl(), String(napcatState.linked && napcatState.linked.url));
-  check('POST /link token', napcatState.linked && napcatState.linked.token === 'tok-123', String(napcatState.linked && napcatState.linked.token));
-  check('POST /link logged', logs.some((l) => String(l).includes('已写入 NapCat 反向 WebSocket')), 'no log');
+  const r = await req('/api/qq-bot/diagnose', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+  check('POST /diagnose -> 200', r.status === 200, JSON.stringify(r.data));
+  check('POST /diagnose has checks array', r.data && Array.isArray(r.data.checks) && r.data.checks.length === 6, JSON.stringify(r.data && r.data.checks));
+  check('POST /diagnose has hints', r.data && Array.isArray(r.data.hints), JSON.stringify(r.data && r.data.hints));
+  check('POST /diagnose no webui token check', r.data && r.data.checks.every((c) => c.id !== 'token' && c.id !== 'webui'), JSON.stringify(r.data && r.data.checks.map((c) => c.id)));
+  check('POST /diagnose standalone hint', r.data && r.data.hints.some((h) => String(h).includes('独立测试')), JSON.stringify(r.data && r.data.hints));
 }
 
-// --- 6. stats reset + log clear ----------------------------------------------
+// --- 6. stats reset + log clear ---------------------------------------------
 {
   await req('/api/qq-bot/stats-reset', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
   check('stats reset', stats.received === 0 && stats.answered === 0 && stats.failed === 0, JSON.stringify({ r: stats.received, a: stats.answered, f: stats.failed }));
@@ -203,10 +196,18 @@ stats.received = 3; stats.answered = 2; stats.failed = 1; stats.lastError = 'boo
   check('guard: remote peer rejected', isBridgeRequestAllowed({ headers: { host: '127.0.0.1:1234' }, socket: { remoteAddress: '203.0.113.9' } }) === false, 'allowed');
 }
 
+// --- 10. NapCat routes are gone ---------------------------------------------
+{
+  for (const p of ['/api/qq-bot/qr', '/api/qq-bot/qr.svg', '/api/qq-bot/login-info', '/api/qq-bot/link', '/api/qq-bot/napcat-install', '/api/qq-bot/napcat-launch']) {
+    check(`NapCat route ${p} is gone`, !routeMap.has(p), [...routeMap.keys()]);
+  }
+}
+
 // --- teardown ----------------------------------------------------------------
+forward.dispose();
 await bridge.stop();
 panel.close();
-napcat.close();
+try { fs.unlinkSync(STORE_PATH); } catch { /* already gone */ }
 
 const failed = results.filter((r) => !r.ok);
 console.log(failed.length ? `\nFAILED ${failed.length}/${results.length}` : `\nALL_BRIDGE_PASS ${results.length}/${results.length}`);

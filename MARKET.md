@@ -7,6 +7,11 @@
 
 两种方式互不依赖，建议先做 A，再按需做 B。
 
+> 本插件是「零下载」的 DSH 面板插件：纯 Node、零 npm 依赖、不下载不安装任何 QQ 客户端。
+> 启用后即可在面板「① 直聊测试」里直接走完整 BotLogic 流程；如需连接真实 QQ，
+> 可选填一个**已经装好并正在运行**的 OneBot v11 正向 / 反向 WebSocket 地址，
+> 插件本身不会自动下载任何东西。
+
 ---
 
 ## 方式 A：自建市场源（推荐）
@@ -77,9 +82,9 @@ git+https://github.com/luchengfj/qq-bot.git#<40-hex-commit>
 ### 3. 已满足的收录要求
 
 - `package.json` 声明了 `dsh.bundle.patch`，`cordis.patch.yml` 含 `insert` 行 `{ id: qq-bot, name: '@local/qq-bot' }`。
-- 仓库有真实可运行代码（OneBot v11 桥接、视觉问答、面板、记忆、安装器等），非占位/纯依赖包。
+- 仓库有真实可运行代码（OneBot v11 反向 / 正向 WS 与 HTTP POST 桥接、视觉问答、面板直聊测试、记忆等），非占位/纯依赖包。
 - 仓库创建于 2026-10-30，已超过 1 天。
-- 仓库已添加 `dsh-plugin` topic（另含 `qq-bot`、`onebot-v11`、`napcat`、`deepseek-harness`）。
+- 仓库已添加 `dsh-plugin` topic（另含 `qq-bot`、`onebot-v11`、`zero-download`、`direct-chat`、`deepseek-harness`）。
 - 描述与代码一致，无夸大营销词；分类选了最贴近的 `identity`（QQ 通道/身份通信）。
 - 含 MIT `LICENSE`。
 

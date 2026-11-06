@@ -6,15 +6,16 @@
   "repository": "https://github.com/luchengfj/qq-bot",
   "icon": "https://raw.githubusercontent.com/luchengfj/qq-bot/main/assets/icon-180.png",
   "description": {
-    "en": "Turn DeepSeek Harness into a QQ bot channel over OneBot v11. Receives private and group messages including images through a reverse WebSocket or HTTP connection, answers with the model currently selected in Harness (no API key needed) or an OpenAI-compatible vision endpoint, and ships a built-in DSH panel for QR login, one-click NapCat installation, status, logs, conversation history and long-term per-user memory.",
-    "zh": "把 DeepSeek Harness 变成 QQ 机器人通道：基于 OneBot v11，通过反向 WebSocket / HTTP 接收私聊与群消息（含图片），默认直接调用 Harness 当前选中的模型回答（免密钥），也可切换 OpenAI 兼容视觉端点；内置 DSH 面板提供扫码登录、NapCat 一键安装与接入、状态、日志、会话上下文与按用户隔离的长期记忆。"
+    "en": "Zero-download QQ bot channel plugin for DeepSeek Harness. Pure Node with no npm dependencies or installs, it provides an in-panel direct-chat test that runs the full BotLogic pipeline immediately with no QQ client and no API key (Harness-native model by default), optionally connects out to an already-running OneBot v11 forward WebSocket or accepts reverse WebSocket / HTTP POST from any existing OneBot implementation, receives images and answers questions, and keeps per-session long-term memory.",
+    "zh": "零下载的 DeepSeek Harness QQ 机器人通道插件：纯 Node、无 npm 依赖、不下载不安装任何 QQ 客户端，启用后即可在面板「① 直聊测试」里直接走完整的收图、模型作答、记忆与分段回复流程（无需 QQ 客户端、无需密钥，默认跟随 Harness 原生模型）；如需连接真实 QQ，可选填一个已经装好并正在运行的 OneBot v11 正向 WebSocket 地址，或让任意已有 OneBot 实现以反向 WebSocket / HTTP POST 连回本插件；支持接收图片答题与按会话隔离的长期记忆。"
   },
   "category": "identity",
   "keywords": [
     "qq",
     "onebot",
     "onebot-v11",
-    "napcat",
+    "zero-download",
+    "direct-chat",
     "bot-channel",
     "chatbot",
     "vision",

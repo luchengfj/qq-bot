@@ -9,6 +9,11 @@
 // Data comes from the Host bridge registered in lib/bridge.js on
 // ctx.webServer under /api/qq-bot/* (same origin, loopback-only).
 //
+// 「零下载」: NapCat download / install / QR / one-click-link are GONE.
+// The panel has an in-panel direct chat that exercises the real BotLogic
+// pipeline with no install at all, plus a form to connect out to any
+// already-running OneBot v11 server (forward WS) or to let one connect in.
+//
 // NOTE: this module builds every element with React.createElement (h) ONLY.
 // The automatic runtime's element helper takes (type, props, key) - its THIRD
 // positional argument is the KEY, not children. Passing children there leaves
@@ -24,6 +29,7 @@ window.__ModuleLoader__.load({
     const BRIDGE = '/api/qq-bot';
     const PANEL_ID = 'qq-bot';
     const POLL_MS = 4000;
+    const NL = String.fromCharCode(10);
 
     async function bridge(path, options) {
       const res = await fetch(`${BRIDGE}${path}`, Object.assign(
@@ -41,6 +47,9 @@ window.__ModuleLoader__.load({
       method: 'POST',
       body: JSON.stringify(body || {}),
     });
+    // Read-only endpoints on the Host bridge are GET (status/log/memory/*).
+    // `bridge(path)` with no options is a plain GET — don't use call() for them.
+    const read = (path) => bridge(path);
 
     // ---------- small presentational helpers ----------
 
@@ -51,7 +60,6 @@ window.__ModuleLoader__.load({
       }, children);
     }
 
-    // `title` is a node (icon + label), `extra` sits on the right of the head.
     function Card({ title, icon, extra, children, className }) {
       return h('section', {
         className: 'qq-card' + (className ? ` ${className}` : ''),
@@ -112,7 +120,6 @@ window.__ModuleLoader__.load({
 
     // ---------- hero artwork ----------
 
-    /** Inline SVG penguin glyph (sidebar + section icons). */
     function Icon({ size }) {
       const s = size || 18;
       return h('svg', {
@@ -123,7 +130,6 @@ window.__ModuleLoader__.load({
       }));
     }
 
-    /** Friendly bot mark inside a rounded gradient square. */
     function HeroMark() {
       return h('span', { className: 'qq-hero-mark', 'aria-hidden': 'true' },
         h('svg', { viewBox: '0 0 48 48', width: 38, height: 38 }, [
@@ -138,8 +144,6 @@ window.__ModuleLoader__.load({
         ]));
     }
 
-    // ---------- grouped sections ----------
-
     function Section({ icon, title, desc, children, className }) {
       return h('section', { className: 'qq-section' + (className ? ` ${className}` : '') }, [
         h('div', { className: 'qq-section-head', key: 'h' }, [
@@ -153,158 +157,206 @@ window.__ModuleLoader__.load({
       ]);
     }
 
-    // ---------- 运行概览 + 状态徽标 ----------
+    // ---------- ① 直聊测试 (the zero-download core) ----------
 
-    function StatusPanel({ state }) {
-      const s = state.status;
-      const stats = (s && s.stats) || {};
-      const llm = (s && s.llm) || {};
-      const ep = (s && s.endpoint) || {};
-      const nap = (s && s.napcat) || {};
-      const connected = Boolean(s && s.connections > 0);
-      const logged = Boolean(s && s.selfIds && s.selfIds.length);
+    function ChatPanel({ state }) {
+      const [text, setText] = React.useState('');
+      const [image, setImage] = React.useState('');
+      const logRef = React.useRef(null);
+      const messages = state.chatMessages || [];
+
+      React.useEffect(() => {
+        const el = logRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      }, [messages.length]);
+
+      const send = async () => {
+        if ((!text.trim() && !image.trim()) || state.busy === 'chat') return;
+        const result = await state.action('chat', { text, image });
+        if (result && result.ok !== false) {
+          setText('');
+          setImage('');
+        }
+      };
+
+      const onKeyDown = (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          send();
+        }
+      };
+
       return h(Card, {
-        title: '运行状态', icon: '🛰', className: 'qq-card-status',
-        extra: h(Button, {
-          key: 'r', ghost: true, onClick: state.refresh, title: '立即刷新状态',
-        }, '刷新'),
+        title: '直聊测试 · 无需下载任何东西', icon: '💬', className: 'qq-card-chat',
+        extra: h('div', { className: 'qq-row', key: 'x' }, [
+          h(Pill, { key: 'p', kind: 'ok' }, '零下载'),
+          h(Button, {
+            key: 'c', ghost: true, disabled: state.busy === 'chatClear',
+            onClick: () => state.action('chatClear'),
+          }, '清空对话'),
+        ]),
       }, [
-        h('div', { className: 'qq-stat-grid', key: 'tiles' }, [
-          h(StatTile, { key: 'a', label: '连接数', value: s ? s.connections : '—', tone: connected ? 'ok' : '' }),
-          h(StatTile, { key: 'b', label: '已接收', value: stats.received || 0 }),
-          h(StatTile, { key: 'c', label: '已回复', value: stats.answered || 0 }),
-          h(StatTile, { key: 'd', label: '失败', value: stats.failed || 0, tone: stats.failed ? 'err' : '' }),
-        ]),
-        h('div', { className: 'qq-kv-list', key: 'info' }, [
-          h(KV, { k: '已登录 QQ', key: 'q' }, logged ? h(Pill, { kind: 'ok' }, s.selfIds.join(', ')) : '尚未登录'),
-          h(KV, { k: '当前模型', key: 'm' },
-            llm.mode === 'external'
-              ? (llm.hasKey ? `外部端点 · ${llm.model}` : '外部端点 · 未配置密钥')
-              : `Harness 模型 · ${llm.model || '跟随当前选择'}`),
-          h(KV, { k: '反向 WS', key: 'r' }, h('code', null, (s && s.reverseUrl) || '—')),
-          h(KV, { k: '本插件端点', key: 'e' },
-            h('code', null, `${ep.host || '—'}:${ep.port || '—'}${ep.path || ''} · ${ep.replyVia || '—'}`)),
-          h(KV, { k: 'NapCat WebUI', key: 'n' }, [
-            h('code', { key: 'u' }, nap.baseUrl || '—'),
-            nap.hasToken ? null : h(Pill, { key: 't', kind: 'warn' }, '未填令牌'),
-          ]),
-          stats.lastError ? h('p', { className: 'qq-error', key: 'err' }, `最近错误：${stats.lastError}`) : null,
-        ]),
-      ]);
-    }
-
-    // ---------- 连接与登录 ----------
-
-    function LoginPanel({ state }) {
-      const s = state.status;
-      const nap = (s && s.napcat) || {};
-      return h(Card, { title: '扫码登录与接入', icon: '🔑' }, [
-        h('div', { className: 'qq-row', key: 'btns' }, [
-          h(Button, {
-            key: 'qr', onClick: () => state.action('newQr'),
-            disabled: state.busy === 'newQr', loading: state.busy === 'newQr',
-          }, state.qrUrl ? '刷新二维码' : '获取二维码'),
-          h(Button, {
-            key: 'lk', ghost: true, onClick: () => state.action('link'),
-            disabled: state.busy === 'link', loading: state.busy === 'link',
-          }, '一键接入反向 WS'),
-          (s && s.setupUrl)
-            ? h('a', { className: 'qq-link', key: 'a', href: s.setupUrl, target: '_blank', rel: 'noreferrer' }, '独立控制台 ↗')
-            : null,
-        ]),
-        h('div', { className: 'qq-qr-wrap', key: 'qr' }, [
-          h('div', { className: 'qq-qr', key: 'box' },
-            state.qrUrl
-              ? h('img', {
-                  className: 'qq-qr-img', alt: 'QQ 登录二维码',
-                  src: `${BRIDGE}/qr.svg?t=${state.qrStamp}`,
-                })
-              : h('span', { className: 'qq-qr-empty', 'aria-hidden': 'true' }, '▦')),
-          h('div', { className: 'qq-qr-side', key: 'side' }, [
-            h('p', { className: 'qq-qr-lead', key: 'l' }, state.qrUrl ? '请用手机 QQ 扫码' : '点击「获取二维码」开始'),
-            h('div', { className: 'qq-row', key: 'cd' }, [
-              h(Pill, { kind: 'warn' }, '⏱ 约 115 秒后失效'),
-            ]),
-            h('p', { className: 'qq-muted', key: 't' },
-              '二维码由插件本地生成，不会上传到任何第三方；过期后点「刷新二维码」即可。'),
+        h('p', { className: 'qq-muted', key: 'lead' },
+          '直接在下面发消息，插件会把它当成一条真实的 QQ 私聊消息，走完整的收图、模型作答、记忆与分段回复流程。不需要 NapCat、不需要扫码、不需要下载任何东西。'),
+        h('div', { className: 'qq-chat-log', key: 'log', ref: logRef },
+          messages.length
+            ? messages.map((m) => h('div', {
+                className: 'qq-chat-msg' + (m.role === 'user' ? ' qq-chat-user' : ' qq-chat-bot'),
+                key: m.id,
+              }, [
+                h('span', { className: 'qq-chat-role', key: 'r' }, m.role === 'user' ? '你' : '机器人'),
+                h('p', { className: 'qq-chat-text', key: 't' }, m.text),
+                h('span', { className: 'qq-chat-meta', key: 'm' },
+                  (m.images ? '含图片 · ' : '') + new Date(m.at).toLocaleTimeString()),
+              ]))
+            : h('div', { className: 'qq-chat-empty', key: 'e' }, [
+                h('span', { className: 'qq-empty-icon', key: 'i', 'aria-hidden': 'true' }, '💬'),
+                h('span', { className: 'qq-muted', key: 't' }, '还没有消息。输入「你好」，或「我叫小明」试试记忆。'),
+              ])),
+        h('div', { className: 'qq-chat-input', key: 'in' }, [
+          h('textarea', {
+            className: 'qq-input qq-textarea', key: 'ta', rows: 2,
+            value: text, onChange: (e) => setText(e.target.value), onKeyDown,
+            placeholder: '说点什么…（Enter 发送，Shift+Enter 换行）',
+          }),
+          h('input', {
+            className: 'qq-input', key: 'im', value: image,
+            onChange: (e) => setImage(e.target.value),
+            placeholder: '可选：图片 http(s) 地址 / data:image / base64://',
+          }),
+          h('div', { className: 'qq-row', key: 'b' }, [
+            h(Button, {
+              key: 's', onClick: send,
+              disabled: (!text.trim() && !image.trim()) || state.busy === 'chat',
+              loading: state.busy === 'chat',
+            }, '发送消息'),
+            h(Button, {
+              key: 't', ghost: true, disabled: state.busy === 'llmTest',
+              loading: state.busy === 'llmTest', onClick: () => state.action('llmTest'),
+            }, '测试模型接口'),
+            state.testResult
+              ? h('span', {
+                  key: 'tr', className: state.testResult.ok ? 'qq-ok' : 'qq-error',
+                }, state.testResult.ok
+                  ? `模型正常（${state.testResult.ms} ms）：${state.testResult.reply}`
+                  : `模型异常：${state.testResult.error}`)
+              : null,
           ]),
         ]),
-        h('div', { className: 'qq-codebox', key: 'url' }, h('code', null, (s && s.reverseUrl) || '—')),
-        (nap.hints && nap.hints.length)
-          ? h('ul', { className: 'qq-hints', key: 'hints' },
-              nap.hints.map((t, i) => h('li', { key: `h${i}` }, String(t))))
-          : null,
-        h('p', { className: 'qq-muted', key: 'note' },
-          '若无法生成二维码，请确认 NapCat 已启动、端口正确，且 napcat.webuiToken 与 NapCat 登录令牌一致。'),
+        h('p', { className: 'qq-muted', key: 'tip' },
+          '聊天里也能用 /help /status /new /memory /forget 这些指令；机器人记住的事实会出现在下面「记忆与上下文」。'),
       ]);
     }
 
-    // ---------- NapCat 运行时 ----------
+    // ---------- ② 接真实 QQ：正向 WS / 反向 WS / 发消息 ----------
 
-    function InstallPanel({ state }) {
-      const s = state.status;
-      const rt = s && s.napcatRuntime;
-      const job = rt && rt.job;
-      const steps = (job && job.steps) || [];
-      return h(Card, { title: '安装与启动', icon: '📦' }, [
-        h('div', { className: 'qq-row', key: 'pills' }, [
-          h(Pill, { key: 'i', kind: rt && rt.installed ? 'ok' : 'warn' }, rt && rt.installed ? '引导包已下载' : '未安装'),
-          h(Pill, { key: 'r', kind: rt && rt.running ? 'ok' : 'warn' }, rt && rt.running ? 'WebUI 在线' : 'WebUI 未连接'),
-          h(Pill, { key: 's', kind: rt && rt.ready ? 'ok' : 'warn' }, rt && rt.ready ? '运行时就绪' : '运行时未就绪'),
-          rt && rt.busy ? h(Pill, { key: 'b', kind: 'info' }, `进行中：${rt.busy}`) : null,
+    const MODE_LABELS = {
+      standalone: '独立测试',
+      both: '正+反向已连接',
+      forward: '正向已连接',
+      reverse: '反向已连接',
+    };
+
+    function ForwardPanel({ state }) {
+      const fwd = (state.status && state.status.forward) || {};
+      const [url, setUrl] = React.useState('');
+      const [token, setToken] = React.useState('');
+      const touched = React.useRef(false);
+
+      React.useEffect(() => {
+        if (!touched.current && fwd.url) setUrl(fwd.url);
+      }, [fwd.url]);
+
+      const statusText = fwd.connected ? '已连接'
+        : (fwd.status === 'connecting' ? '连接中…'
+          : (fwd.status === 'error' ? '连接失败'
+            : (fwd.status === 'disabled' ? '已停用' : '未连接')));
+
+      return h(Card, {
+        title: '连接已有的 OneBot 端（正向 WS）', icon: '🔗',
+        extra: h(Pill, { key: 'p', kind: fwd.connected ? 'ok' : 'neutral' }, statusText),
+      }, [
+        h('p', { className: 'qq-muted', key: 'd' },
+          '如果你本机已有 NapCat / Lagrange / LLOneBot 等 OneBot v11 服务并且开了「正向 WebSocket」，把地址填在这里即可。插件会主动连过去，不下载、不安装、不启动任何程序。'),
+        h(Field, { label: '正向 WebSocket 地址', key: 'u' },
+          h('input', {
+            className: 'qq-input', value: url,
+            onChange: (e) => { touched.current = true; setUrl(e.target.value); },
+            placeholder: 'ws://127.0.0.1:3001/ 或 ws://127.0.0.1:6700/',
+          })),
+        h(Field, { label: '访问令牌（可选）', key: 't' },
+          h('input', {
+            className: 'qq-input', value: token,
+            onChange: (e) => setToken(e.target.value),
+            placeholder: '对方要求 access_token 时才填',
+          })),
+        h('div', { className: 'qq-row', key: 'b' }, [
+          h(Button, {
+            key: 'c', disabled: !url.trim() || state.busy === 'forwardConfig',
+            loading: state.busy === 'forwardConfig',
+            onClick: () => state.action('forwardConfig', { url, accessToken: token, enabled: true }),
+          }, '保存并连接'),
+          h(Button, {
+            key: 'x', ghost: true, danger: true, disabled: state.busy === 'forwardDisconnect',
+            onClick: () => state.action('forwardDisconnect'),
+          }, '断开'),
         ]),
-        rt && rt.dir ? h('p', { className: 'qq-muted', key: 'dir' }, `安装目录：${rt.dir}`) : null,
-        rt && rt.bootstrapper && !rt.ready
-          ? h('p', { className: 'qq-muted', key: 'boot' }, '当前只有 1 MB 引导包：点「启动 NapCat」会先运行 NapCatInstaller.exe 下载真正的 Shell 运行时（QQNT + NapCat），完成后再点一次「启动 NapCat」。')
+        fwd.lastError
+          ? h('p', { className: 'qq-error', key: 'e' }, `最近错误：${fwd.lastError}`)
           : null,
-        rt && rt.shell && rt.shell.dir ? h('p', { className: 'qq-muted', key: 'sh' }, `运行时目录：${rt.shell.dir}`) : null,
-        rt && rt.launcher ? h('p', { className: 'qq-muted', key: 'ln' }, `启动器：${rt.launcher}`) : null,
-        rt && rt.lastError ? h('p', { className: 'qq-error', key: 'er' }, String(rt.lastError)) : null,
-        h('div', { className: 'qq-row', key: 'btns' }, [
-          h(Button, {
-            key: 'i', onClick: () => state.action('napInstall'),
-            disabled: Boolean(state.busy), loading: state.busy === 'napInstall',
-          }, rt && rt.installed ? '重新安装 NapCat' : '下载并安装 NapCat'),
-          h(Button, {
-            key: 'l', ghost: true, onClick: () => state.action('napLaunch'),
-            disabled: Boolean(state.busy) || !(rt && rt.installed),
-            loading: state.busy === 'napLaunch',
-          }, rt && rt.bootstrapper && !rt.ready ? '运行 NapCat 安装器' : '启动 NapCat'),
-        ]),
-        job
-          ? h('div', { className: 'qq-job', key: 'job' }, [
-              h('p', { className: 'qq-muted', key: 'st' }, `状态：${job.stage}${job.done ? '' : ' …'}`),
-              steps.length
-                ? h('ul', { className: 'qq-mem-facts', key: 'ul' },
-                    steps.map((x, i) => h('li', { key: `s${i}` }, String(x))))
-                : null,
-              job.error ? h('p', { className: 'qq-error', key: 'je' }, String(job.error)) : null,
-            ])
-          : h('p', { className: 'qq-muted', key: 'idle' },
-              '首次使用：先「下载并安装 NapCat」，再「启动 NapCat」（引导包阶段会先运行安装器），等「运行时就绪 / WebUI 在线」后回到「接入」页扫码登录。'),
+        fwd.url
+          ? h('p', { className: 'qq-muted', key: 'f' }, `当前目标：${fwd.url}（自动重连间隔 ${Math.round((fwd.reconnectMs || 5000) / 1000)} 秒，配置重启后保留）`)
+          : null,
       ]);
     }
 
-    // ---------- 测试 ----------
+    function ReversePanel({ state }) {
+      const ep = (state.status && state.status.endpoint) || {};
+      const reverse = ep.reverseWsUrl || `ws://127.0.0.1:${ep.port || 6700}${ep.path || '/onebot'}`;
+      const [copied, setCopied] = React.useState(false);
+      const copy = () => {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(reverse);
+            setCopied(true);
+          }
+        } catch { /* ignore */ }
+      };
+      return h(Card, { title: '让 OneBot 端连回本插件（反向 WS）', icon: '🔌' }, [
+        h('p', { className: 'qq-muted', key: 'd' },
+          '另一种方式：在已有的 OneBot 实现里把「反向 WebSocket」地址填成下面这个，让它主动连到插件。两种方式任选其一，不需要下载任何东西。'),
+        h('div', { className: 'qq-codebox', key: 'box' }, h('code', null, reverse)),
+        h('div', { className: 'qq-row', key: 'b' },
+          h(Button, { key: 'c', ghost: true, onClick: copy }, copied ? '已复制' : '复制地址')),
+        h('div', { className: 'qq-kv-list', key: 'kv' }, [
+          h(KV, { k: '监听地址', key: 'a' }, h('code', null, `${ep.host || '—'}:${ep.port || '—'}${ep.path || ''}`)),
+          h(KV, { k: '回复方式', key: 'r' }, h('code', null, ep.replyVia || '—')),
+          h(KV, { k: '当前连接数', key: 'n' },
+            h(Pill, { kind: (state.status && state.status.connections > 0) ? 'ok' : 'neutral' },
+              String((state.status && state.status.connections) || 0))),
+        ]),
+      ]);
+    }
 
     function SendPanel({ state }) {
       const [form, setForm] = React.useState({
-        messageType: 'group',
-        userId: '',
-        groupId: '',
-        text: '',
+        messageType: 'private', userId: '', groupId: '', text: '',
       });
       const update = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
-      const send = () => state.action('send', form);
       const valid = Boolean(form.text.trim()) && (
         form.messageType === 'private' ? Boolean(form.userId.trim()) : Boolean(form.groupId.trim())
       );
-      return h(Card, { title: '发送测试消息', icon: '✉️' }, [
+      const connected = Boolean(state.status && state.status.connections > 0);
+      return h(Card, { title: '向真实 QQ 发一条消息', icon: '✉️' }, [
+        h('p', { className: 'qq-muted', key: 'd' },
+          connected
+            ? '已有 OneBot 连接，可以直接发消息测试真实收发。'
+            : '需要「正向 WS」或「反向 WS」其中一种方式连上真实 QQ 后才能发送；没有连接也没关系，上面「直聊测试」随时可用。'),
         h('div', { className: 'qq-row', key: 'r1' }, [
           h(Field, { label: '类型', key: 't' },
             h('select', { className: 'qq-input', value: form.messageType, onChange: update('messageType') }, [
-              h('option', { key: 'g', value: 'group' }, '群消息'),
               h('option', { key: 'p', value: 'private' }, '私聊消息'),
+              h('option', { key: 'g', value: 'group' }, '群消息'),
             ])),
           form.messageType === 'private'
             ? h(Field, { label: 'QQ 号', key: 'u' },
@@ -314,31 +366,53 @@ window.__ModuleLoader__.load({
         ]),
         h(Field, { label: '内容', key: 'c' },
           h('input', { className: 'qq-input', value: form.text, onChange: update('text'), placeholder: '要发送的文本' })),
-        h('div', { className: 'qq-row', key: 'r2' },
+        h('div', { className: 'qq-row', key: 'r2' }, [
           h(Button, {
-            key: 'b', onClick: send, disabled: !valid || state.busy === 'send',
-            loading: state.busy === 'send',
-          }, '发送消息')),
-        h('div', { className: 'qq-row', key: 'r3' }, [
-          h(Button, {
-            key: 't', ghost: true, disabled: state.busy === 'llmTest',
-            loading: state.busy === 'llmTest', onClick: () => state.action('llmTest'),
-          }, '测试模型接口'),
+            key: 'b', onClick: () => state.action('send', form),
+            disabled: !valid || !connected || state.busy === 'send', loading: state.busy === 'send',
+          }, '发送消息'),
           h(Button, { key: 's', ghost: true, onClick: () => state.action('resetStats') }, '清空统计'),
-          h(Button, { key: 'l', ghost: true, onClick: () => state.action('clearLog') }, '清空日志'),
         ]),
-        state.testResult
-          ? h('p', {
-              key: 'tr',
-              className: state.testResult.ok ? 'qq-ok' : 'qq-error',
-            }, state.testResult.ok
-              ? `模型接口正常（${state.testResult.ms} ms）：${state.testResult.reply}`
-              : `模型接口异常：${state.testResult.error}`)
-          : null,
       ]);
     }
 
-    /** Diagnostics: render {name, ok, detail}[] + hints (also tolerates checks[]). */
+    // ---------- ③ 运行状态 + 自检 ----------
+
+    function StatusPanel({ state }) {
+      const s = state.status;
+      const stats = (s && s.stats) || {};
+      const llm = (s && s.llm) || {};
+      const ep = (s && s.endpoint) || {};
+      const fwd = (s && s.forward) || {};
+      const connected = Boolean(s && s.connections > 0);
+      return h(Card, {
+        title: '运行状态', icon: '🛰', className: 'qq-card-status',
+        extra: h(Button, { key: 'r', ghost: true, onClick: state.refresh, title: '立即刷新状态' }, '刷新'),
+      }, [
+        h('div', { className: 'qq-stat-grid', key: 'tiles' }, [
+          h(StatTile, { key: 'a', label: '连接数', value: s ? s.connections : '—', tone: connected ? 'ok' : '' }),
+          h(StatTile, { key: 'b', label: '已接收', value: stats.received || 0 }),
+          h(StatTile, { key: 'c', label: '已回复', value: stats.answered || 0 }),
+          h(StatTile, { key: 'd', label: '失败', value: stats.failed || 0, tone: stats.failed ? 'err' : '' }),
+        ]),
+        h('div', { className: 'qq-kv-list', key: 'info' }, [
+          h(KV, { k: '运行模式', key: 'md' },
+            h(Pill, { kind: connected || fwd.connected ? 'ok' : 'info' }, MODE_LABELS[s && s.mode] || '独立测试')),
+          h(KV, { k: '当前模型', key: 'm' },
+            llm.mode === 'external'
+              ? (llm.hasKey ? `外部端点 · ${llm.model}` : '外部端点 · 未配置密钥')
+              : `Harness 模型 · ${llm.model || '跟随当前选择'}`),
+          h(KV, { k: '反向 WS', key: 'r' }, h('code', null, ep.reverseWsUrl || '—')),
+          h(KV, { k: '正向 WS', key: 'f' },
+            fwd.url ? h('code', null, fwd.url) : '未配置（可选）'),
+          h(KV, { k: '插件端点', key: 'e' },
+            h('code', null, `${ep.host || '—'}:${ep.port || '—'}${ep.path || ''} · ${ep.replyVia || '—'}`)),
+          stats.lastError ? h('p', { className: 'qq-error', key: 'err' }, `最近错误：${stats.lastError}`) : null,
+        ]),
+      ]);
+    }
+
+    /** Diagnostics: render {label, ok, detail}[] + hints (also tolerates checks[]). */
     function DiagPanel({ state }) {
       const diag = state.diagnose;
       const raw = diag
@@ -353,7 +427,7 @@ window.__ModuleLoader__.load({
       const passed = items.filter((c) => c.ok).length;
       const failed = items.length - passed;
       return h(Card, {
-        title: '连接诊断', icon: '🩺', className: 'qq-card-diag',
+        title: '运行自检', icon: '🩺', className: 'qq-card-diag',
         extra: h(Button, {
           key: 'd', onClick: () => state.action('diagnose'),
           disabled: state.busy === 'diagnose', loading: state.busy === 'diagnose',
@@ -391,7 +465,7 @@ window.__ModuleLoader__.load({
           : h('div', { className: 'qq-empty', key: 'e' }, [
               h('span', { className: 'qq-empty-icon', key: 'i', 'aria-hidden': 'true' }, '🩺'),
               h('span', { className: 'qq-muted', key: 't' },
-                '还没有运行过诊断。点「运行诊断」开始逐项排查连接问题。'),
+                '还没有运行过诊断。点「运行诊断」逐项检查通道、模型、连接与记忆。'),
             ]),
         h('div', { className: 'qq-log-head', key: 'lh' }, [
           h('span', { className: 'qq-muted', key: 't' }, '最近日志'),
@@ -409,7 +483,7 @@ window.__ModuleLoader__.load({
       ]);
     }
 
-    // ---------- 记忆 ----------
+    // ---------- ④ 记忆 ----------
 
     function MemoryPanel({ state }) {
       const mem = state.status && state.status.memory;
@@ -432,7 +506,7 @@ window.__ModuleLoader__.load({
         setOpen(key);
         setLoading(key);
         try {
-          const data = await call(`/memory-facts?key=${encodeURIComponent(key)}`);
+          const data = await read(`/memory-facts?key=${encodeURIComponent(key)}`);
           setFacts(data.facts || []);
         } catch (err) {
           setFacts([]);
@@ -443,7 +517,7 @@ window.__ModuleLoader__.load({
 
       const refreshOpen = async (key) => {
         try {
-          const data = await call(`/memory-facts?key=${encodeURIComponent(key)}`);
+          const data = await read(`/memory-facts?key=${encodeURIComponent(key)}`);
           setFacts(data.facts || []);
         } catch (err) {
           setFacts([]);
@@ -477,7 +551,7 @@ window.__ModuleLoader__.load({
         ]),
         senders.length === 0
           ? h('p', { className: 'qq-muted', key: 'empty' },
-            '还没有任何记忆。用户说「我叫小明」这类话时会自动记住；也可以在 QQ 里发「我的记忆」查看。')
+            '还没有任何记忆。在直聊里说「我叫小明」这类话时会自动记住；也可以在 QQ 里发「我的记忆」查看。')
           : h('div', { className: 'qq-mem-list', key: 'list' },
               senders.map((row) => h('div', { className: 'qq-mem-row', key: row.key }, [
                 h('button', {
@@ -524,7 +598,7 @@ window.__ModuleLoader__.load({
       ]);
     }
 
-    // ---------- 配置 ----------
+    // ---------- ⑤ 配置 ----------
 
     function ConfigPanel({ state }) {
       const s = state.status;
@@ -548,7 +622,7 @@ window.__ModuleLoader__.load({
           h('dd', { key: 'v5' }, allow.denyUsers && allow.denyUsers.length ? allow.denyUsers.join(', ') : '无'),
         ]),
         h('p', { className: 'qq-muted', key: 'm' },
-          '配置在插件包的 cordis.patch.yml 中修改；改完后在插件管理里关闭再启用本插件即可生效（本地目录安装不会热更新）。'),
+          '配置在插件包的 cordis.patch.yml 中修改；改完后在插件管理里关闭再启用本插件即可生效（本地目录安装不会热更新）。接真实 QQ 的正向 WS 地址在上面的连接卡片里填，会单独保存。'),
       ]);
     }
 
@@ -559,10 +633,9 @@ window.__ModuleLoader__.load({
       const [error, setError] = React.useState('');
       const [busy, setBusy] = React.useState('');
       const [notice, setNotice] = React.useState('');
-      const [qrUrl, setQrUrl] = React.useState('');
-      const [qrStamp, setQrStamp] = React.useState(0);
       const [testResult, setTestResult] = React.useState(null);
       const [diagnose, setDiagnose] = React.useState(null);
+      const [chatMessages, setChatMessages] = React.useState([]);
       const alive = React.useRef(true);
 
       const refresh = React.useCallback(async () => {
@@ -570,6 +643,7 @@ window.__ModuleLoader__.load({
           const data = await bridge('/status');
           if (!alive.current) return;
           setStatus(data);
+          setChatMessages((data.chat && data.chat.messages) || []);
           setError('');
         } catch (err) {
           if (!alive.current) return;
@@ -590,29 +664,32 @@ window.__ModuleLoader__.load({
       const action = React.useCallback(async (name, payload) => {
         setBusy(name);
         setNotice('');
+        let result = null;
         try {
-          if (name === 'newQr') {
-            const result = await call('/qr');
-            if (result.logined) {
-              setQrUrl('');
-              setNotice(`该 NapCat 已经登录${result.uin ? `（QQ ${result.uin}）` : ''}`);
-            } else {
-              setQrUrl(result.qr.url);
-              setQrStamp(Date.now());
-              setNotice('请用手机 QQ 扫码；约 115 秒后失效。');
-            }
-          } else if (name === 'link') {
-            const result = await call('/link');
-            setNotice(result.added ? '已新增接入到 NapCat' : '已更新 NapCat 中的接入');
+          if (name === 'chat') {
+            result = await post('/chat', payload);
+            setChatMessages(result.history || []);
+            if (result.error) setNotice(`回复异常：${result.error}`);
+          } else if (name === 'chatClear') {
+            await post('/chat-clear', {});
+            setChatMessages([]);
+          } else if (name === 'forwardConfig') {
+            result = await post('/forward-config', payload);
+            setNotice(result.ok ? '已保存并尝试连接正向 WebSocket。' : `配置失败：${result.error}`);
+            refresh();
+          } else if (name === 'forwardDisconnect') {
+            await post('/forward-disconnect', {});
+            setNotice('正向 WebSocket 已断开。');
+            refresh();
           } else if (name === 'send') {
             await post('/send', payload);
             setNotice('已发送。');
             refresh();
           } else if (name === 'llmTest') {
-            const result = await call('/llm-test');
+            result = await call('/llm-test');
             setTestResult(result);
           } else if (name === 'diagnose') {
-            const result = await call('/diagnose');
+            result = await call('/diagnose');
             setDiagnose(result);
           } else if (name === 'resetStats') {
             await call('/stats-reset');
@@ -621,7 +698,7 @@ window.__ModuleLoader__.load({
             await call('/log-clear');
             refresh();
           } else if (name === 'memSave') {
-            const result = await call('/memory-save');
+            result = await call('/memory-save');
             setNotice(result.ok ? '记忆已写入磁盘。' : `保存失败：${result.error || '未知错误'}`);
             refresh();
           } else if (name === 'memForget') {
@@ -636,43 +713,31 @@ window.__ModuleLoader__.load({
             await post('/memory-newtopic', payload);
             setNotice('已清空该会话的对话上下文（长期记忆保留）。');
             refresh();
-          } else if (name === 'napInstall') {
-            const result = await call('/napcat-install');
-            setNotice(result.started ? '已在后台开始下载安装，下方会显示进度。' : `无法开始：${result.error || '未知错误'}`);
-            refresh();
-          } else if (name === 'napLaunch') {
-            const result = await call('/napcat-launch');
-            const hint = result.hint ? ` ${result.hint}` : '';
-            setNotice(result.ok
-              ? `${result.phase === 'bootstrap' ? '已启动 NapCat 安装器' : '已启动 NapCat 运行时'}（pid=${result.pid}）。${hint}`
-              : `启动失败：${result.error || '未知错误'}`);
-            refresh();
           }
         } catch (err) {
           setNotice(`失败：${err.message || String(err)}`);
           if (name === 'llmTest') setTestResult({ ok: false, error: err.message });
           if (name === 'diagnose') setDiagnose({ error: err.message || String(err), checks: [], hints: [] });
+          result = { ok: false, error: err.message || String(err) };
         } finally {
           setBusy('');
         }
+        return result;
       }, [refresh]);
 
-      const state = { status, error, busy, notice, qrUrl, qrStamp, testResult, diagnose, action, refresh };
-      const connected = Boolean(status && status.connections > 0);
+      const state = { status, error, busy, notice, testResult, diagnose, chatMessages, action, refresh };
       const s = status || {};
       const llm = s.llm || {};
-      const nap = s.napcat || {};
       const mem = s.memory || {};
-      const rt = s.napcatRuntime || {};
+      const fwd = s.forward || {};
+      const connected = Boolean(s.connections > 0) || Boolean(fwd.connected);
 
-      // Hero status-pill row: 连接 / 模型 / NapCat / 记忆
       const heroPills = h('div', { className: 'qq-hero-pills' }, [
-        h(Pill, { key: 'c', kind: connected ? 'ok' : 'warn' },
-          connected ? `● 连接 ${s.connections}` : '○ 未连接'),
+        h(Pill, { key: 'c', kind: connected ? 'ok' : 'info' },
+          connected ? '● 已连接真实 QQ' : '○ 独立测试模式'),
         h(Pill, { key: 'm', kind: (llm.mode === 'external' && !llm.hasKey) ? 'warn' : (llm.model ? 'info' : 'neutral') },
           llm.mode === 'external' ? `模型 · 外部 ${llm.model || '未配置'}` : `模型 · ${llm.model || 'Harness'}`),
-        h(Pill, { key: 'n', kind: rt.running ? 'ok' : 'warn' },
-          rt.running ? 'NapCat · 在线' : `NapCat · ${rt.installed ? '未启动' : (nap.configured ? '未连接' : '未安装')}`),
+        h(Pill, { key: 'z', kind: 'ok' }, '零下载 · 无需安装'),
         h(Pill, { key: 'r', kind: mem.enabled ? 'ok' : 'neutral' },
           mem.enabled ? `记忆 · ${mem.facts || 0} 条` : '记忆 · 关闭'),
       ]);
@@ -683,9 +748,10 @@ window.__ModuleLoader__.load({
             h(HeroMark, { key: 'm' }),
             h('div', { className: 'qq-compact-titles', key: 't' }, [
               h('strong', { key: 'n' }, 'QQ 机器人'),
-              h('span', { className: 'qq-muted', key: 's' }, connected ? '运行中 · 已连接' : '等待 NapCat 连接'),
+              h('span', { className: 'qq-muted', key: 's' },
+                connected ? '已连接真实 QQ' : '零下载 · 面板直聊可用'),
             ]),
-            h(Pill, { key: 'p', kind: connected ? 'ok' : 'warn' }, connected ? '已连接' : '未连接'),
+            h(Pill, { key: 'p', kind: connected ? 'ok' : 'info' }, connected ? '已连接' : '可直聊'),
           ]),
           error ? h('p', { className: 'qq-error', key: 'e' }, error) : null,
           heroPills,
@@ -721,12 +787,12 @@ window.__ModuleLoader__.load({
           h(HeroMark, { key: 'm' }),
           h('div', { className: 'qq-hero-titles', key: 't' }, [
             h('h2', { key: 'n' }, 'QQ 机器人'),
-            h('p', { key: 's' }, '连接 NapCat，让 Harness 模型在 QQ 里替你自动回复'),
+            h('p', { key: 's' }, '零下载 · 直接在面板里聊天；接真实 QQ 只需填一个已有的 OneBot 地址'),
           ]),
           h('div', { className: 'qq-hero-status', key: 'st' }, [
             h('span', { className: `qq-status qq-status-${connected ? 'ok' : 'idle'}` }, [
               h('span', { className: 'qq-status-dot', key: 'd' }),
-              h('span', { key: 'l' }, connected ? '已连接' : '未连接'),
+              h('span', { key: 'l' }, connected ? '已连接' : '独立测试'),
             ]),
           ]),
           heroPills,
@@ -740,29 +806,30 @@ window.__ModuleLoader__.load({
         (!status && !error) ? h('p', { className: 'qq-muted qq-loading', key: 'ld' }, '正在加载状态…') : null,
         h('div', { className: 'qq-sections', key: 'sections' }, [
           h(Section, {
-            key: 'sec-connect', icon: '🔌', title: '连接与登录',
-            desc: '运行状态、扫码登录与一键接入反向 WebSocket',
+            key: 'sec-chat', icon: '💬', title: '① 直聊测试',
+            desc: '不装任何东西，立即验证收图、答题、记忆与回复',
+          }, h(ChatPanel, { key: 'chat', state })),
+          h(Section, {
+            key: 'sec-real', icon: '🔌', title: '② 连接真实 QQ（可选）',
+            desc: '插件不下载不安装：填一个已有的 OneBot 正向 WS 地址，或让它反向连回来',
           }, [
-            h(StatusPanel, { key: 'status', state }),
-            h(LoginPanel, { key: 'login', state }),
+            h(ForwardPanel, { key: 'fwd', state }),
+            h(ReversePanel, { key: 'rev', state }),
+            h(SendPanel, { key: 'send', state }),
           ]),
           h(Section, {
-            key: 'sec-nap', icon: '🐱', title: 'NapCat 运行时',
-            desc: '在本机安装、启动 NapCat 并查看安装进度',
-          }, h(InstallPanel, { key: 'install', state })),
-          h(Section, {
-            key: 'sec-test', icon: '🧪', title: '测试与诊断',
-            desc: '发一条消息试试、跑一次连接自检',
+            key: 'sec-status', icon: '🩺', title: '③ 运行状态与自检',
+            desc: '连接、模型、记忆逐项检查，附最近日志',
           }, [
-            h(SendPanel, { key: 'send', state }),
+            h(StatusPanel, { key: 'status', state }),
             h(DiagPanel, { key: 'diag', state }),
           ]),
           h(Section, {
-            key: 'sec-mem', icon: '🧠', title: '记忆',
-            desc: '机器人记住的长期信息与对话上下文',
+            key: 'sec-mem', icon: '🧠', title: '④ 记忆与上下文',
+            desc: '机器人记住的长期信息与最近对话',
           }, h(MemoryPanel, { key: 'memory', state })),
           h(Section, {
-            key: 'sec-cfg', icon: '⚙️', title: '配置',
+            key: 'sec-cfg', icon: '⚙️', title: '⑤ 配置',
             desc: '当前生效的触发与白名单规则（只读）',
           }, h(ConfigPanel, { key: 'config', state })),
         ]),
@@ -772,16 +839,16 @@ window.__ModuleLoader__.load({
 
     /** Compact one-line summary rendered on the plugin list rows. */
     function SummaryText() {
-      const [text, setText] = React.useState('QQ 机器人通道');
+      const [text, setText] = React.useState('QQ 机器人 · 零下载');
       React.useEffect(() => {
-        let alive = true;
+        let aliveFlag = true;
         bridge('/status').then((data) => {
-          if (!alive) return;
-          const conn = data.connections > 0 ? `已连接 ${data.connections}` : '未连接';
-          const login = data.selfIds && data.selfIds.length ? '已登录' : '未登录';
-          setText(`QQ 机器人 · ${conn} · ${login}`);
+          if (!aliveFlag) return;
+          const conn = data.connections > 0 ? `已连接 ${data.connections}` : '可直聊';
+          const mode = data.mode === 'standalone' ? '独立测试' : (MODE_LABELS[data.mode] || conn);
+          setText(`QQ 机器人 · ${mode}`);
         }).catch(() => { /* keep the default label */ });
-        return () => { alive = false; };
+        return () => { aliveFlag = false; };
       }, []);
       return h('span', { className: 'qq-summary' }, text);
     }
@@ -822,7 +889,7 @@ window.__ModuleLoader__.load({
       '.qq-section-titles{display:grid;gap:1px;min-width:0}',
       '.qq-section-titles h3{margin:0;font-size:15px;font-weight:700;letter-spacing:.2px}',
       '.qq-section-titles p{margin:0;font-size:12px;opacity:.58}',
-      '.qq-section-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}',
+      '.qq-section-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;align-items:start}',
       /* cards */
       '.qq-card{border:1px solid var(--qq-line);border-radius:var(--qq-r);background:color-mix(in srgb,currentColor 2%,transparent);box-shadow:0 1px 2px rgba(0,0,0,.04),0 10px 30px rgba(0,0,0,.06);overflow:hidden;transition:box-shadow .22s ease,border-color .22s ease,transform .22s ease;backdrop-filter:blur(6px)}',
       '.qq-card:hover{box-shadow:0 2px 4px rgba(0,0,0,.05),0 16px 38px rgba(0,0,0,.11);border-color:color-mix(in srgb,var(--qq-a1) 30%,var(--qq-line));transform:translateY(-2px)}',
@@ -857,6 +924,7 @@ window.__ModuleLoader__.load({
       '.qq-field-c{min-width:0}',
       '.qq-input{width:100%;border:1px solid var(--qq-line);border-radius:10px;padding:9px 11px;background:var(--qq-fill-soft);color:inherit;font-size:13px;outline:none;transition:border-color .16s ease,box-shadow .16s ease}',
       '.qq-input:focus{border-color:color-mix(in srgb,var(--qq-a1) 65%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--qq-a1) 16%,transparent)}',
+      '.qq-textarea{resize:vertical;min-height:58px;line-height:1.5}',
       '.qq-dl{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;margin:0;font-size:13px}',
       '.qq-dl dt{opacity:.6}.qq-dl dd{margin:0;word-break:break-all}',
       /* status tiles + kv */
@@ -870,18 +938,20 @@ window.__ModuleLoader__.load({
       '.qq-kv{display:grid;grid-template-columns:104px minmax(0,1fr);gap:6px 14px;align-items:start;font-size:13px;padding:4px 0}',
       '.qq-kv-k{opacity:.58}',
       '.qq-kv-v{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}',
-      /* QR */
-      '.qq-qr-wrap{display:flex;gap:16px;align-items:center;flex-wrap:wrap}',
-      '.qq-qr{display:grid;place-items:center;width:196px;height:196px;flex:0 0 196px;background:#fff;border-radius:16px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,.14),inset 0 0 0 1px rgba(0,0,0,.06);border:1px solid var(--qq-line-soft);position:relative;overflow:hidden}',
-      '.qq-qr-img{width:172px;height:172px;image-rendering:pixelated}',
-      '.qq-qr-empty{font-size:64px;color:#cbd5e1;line-height:1}',
-      '.qq-qr-side{display:grid;gap:9px;flex:1 1 160px;min-width:0}',
-      '.qq-qr-lead{margin:0;font-size:14px;font-weight:650}',
       '.qq-codebox{padding:11px 14px;border-radius:11px;border:1px dashed var(--qq-line);background:var(--qq-fill);overflow:auto}',
-      '.qq-link{font-size:13px;font-weight:650;text-decoration:none;opacity:.8;transition:opacity .16s ease}.qq-link:hover{opacity:1;text-decoration:underline}',
       '.qq-hints{margin:0;padding-left:20px;display:grid;gap:4px;font-size:12px;opacity:.72}',
-      /* install job */
-      '.qq-job{padding:11px 13px;border-radius:11px;border:1px solid var(--qq-line-soft);background:var(--qq-fill);display:grid;gap:6px}',
+      /* chat transcript */
+      '.qq-card-chat .qq-card-body{gap:11px}',
+      '.qq-chat-log{max-height:320px;min-height:150px;overflow:auto;display:grid;gap:10px;align-content:start;padding:14px;border-radius:12px;border:1px solid var(--qq-line-soft);background:var(--qq-fill-soft)}',
+      '.qq-chat-msg{display:grid;gap:3px;max-width:86%;padding:9px 13px;border-radius:14px;border:1px solid var(--qq-line-soft);font-size:13px;animation:qq-in .2s ease}',
+      '@keyframes qq-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}',
+      '.qq-chat-user{justify-self:end;background:color-mix(in srgb,var(--qq-a1) 16%,transparent);border-bottom-right-radius:4px}',
+      '.qq-chat-bot{justify-self:start;background:var(--qq-fill);border-bottom-left-radius:4px}',
+      '.qq-chat-role{font-size:11px;font-weight:700;opacity:.6}',
+      '.qq-chat-text{margin:0;white-space:pre-wrap;word-break:break-word}',
+      '.qq-chat-meta{font-size:10px;opacity:.45}',
+      '.qq-chat-empty{display:grid;gap:8px;justify-items:center;align-content:center;text-align:center;min-height:130px;color:inherit}',
+      '.qq-chat-input{display:grid;gap:9px}',
       /* diagnostics */
       '.qq-diag{display:grid;gap:11px}',
       '.qq-diag-summary{display:flex;gap:8px;align-items:center;flex-wrap:wrap}',
@@ -902,7 +972,6 @@ window.__ModuleLoader__.load({
       '.qq-log-line{display:grid;grid-template-columns:78px 1fr;gap:10px;padding:2px 0}',
       '.qq-log-time{opacity:.48}',
       '.qq-log-msg{word-break:break-word}',
-      /* dots (compact diag) */
       '.qq-dot{width:9px;height:9px;border-radius:50%;flex:0 0 9px}',
       '.qq-dot-ok{background:var(--qq-ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--qq-ok) 20%,transparent)}',
       '.qq-dot-warn{background:var(--qq-warn);box-shadow:0 0 0 3px color-mix(in srgb,var(--qq-warn) 20%,transparent)}',
@@ -931,8 +1000,8 @@ window.__ModuleLoader__.load({
       '.qq-compact-stats span{padding:4px 10px;border-radius:8px;font-size:12px;background:var(--qq-fill);border:1px solid var(--qq-line-soft)}',
       '.qq-compact-diag{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 12px;border-radius:10px;border:1px solid var(--qq-line-soft);background:var(--qq-fill-soft);font-size:12px}',
       '.qq-compact-check{display:inline-flex;align-items:center;gap:6px}',
-      '@media(max-width:720px){.qq-panel{padding:14px;gap:16px}.qq-hero{padding:16px}.qq-section-grid{grid-template-columns:1fr}.qq-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.qq-kv{grid-template-columns:1fr;gap:2px}.qq-qr-wrap{justify-content:center}.qq-hero-pills{gap:6px}}',
-    ].join('\n');
+      '@media(max-width:720px){.qq-panel{padding:14px;gap:16px}.qq-hero{padding:16px}.qq-section-grid{grid-template-columns:1fr}.qq-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.qq-kv{grid-template-columns:1fr;gap:2px}.qq-hero-pills{gap:6px}.qq-chat-msg{max-width:94%}}',
+    ].join(NL);
 
     function mountStyle() {
       if (typeof document === 'undefined') return () => {};

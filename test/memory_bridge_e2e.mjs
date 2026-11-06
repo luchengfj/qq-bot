@@ -29,11 +29,20 @@ memory.remember('private:42', '我住在杭州');
 memory.remember('group:9:42', '我在群里说过的话');
 
 const routes = makeBridgeRoutes({
-  cfg, bridge, setup: null, log: () => {}, logRing: createLogRing(10), stats: createStats(), memory,
+  cfg, bridge, log: () => {}, logRing: createLogRing(10), stats: createStats(), memory,
 });
 
-check('memory endpoints added', routes.length === 19, routes.length);
+// 17 routes in zero-download mode: status, diagnose, log, chat, chat-clear,
+// forward-config, forward-disconnect, llm-test, send, stats-reset, log-clear
+// and the six memory/* endpoints. (NapCat QR/link/install/launch are gone.)
+check('route count is 17 in zero-download mode', routes.length === 17, routes.length);
 const paths = routes.map((r) => r.path);
+for (const p of ['/api/qq-bot/chat', '/api/qq-bot/chat-clear', '/api/qq-bot/forward-config', '/api/qq-bot/forward-disconnect', '/api/qq-bot/diagnose']) {
+  check(`zero-download route ${p}`, paths.indexOf(p) >= 0, paths);
+}
+for (const p of ['/api/qq-bot/qr', '/api/qq-bot/link', '/api/qq-bot/napcat-install', '/api/qq-bot/napcat-launch']) {
+  check(`NapCat route ${p} is gone`, paths.indexOf(p) < 0, paths);
+}
 for (const p of ['/api/qq-bot/memory', '/api/qq-bot/memory-facts', '/api/qq-bot/memory-forget', '/api/qq-bot/memory-save', '/api/qq-bot/memory-history', '/api/qq-bot/memory-newtopic']) {
   check(`route ${p}`, paths.indexOf(p) >= 0, paths);
 }

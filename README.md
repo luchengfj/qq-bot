@@ -1,381 +1,219 @@
 # QQ 机器人通道插件（@local/qq-bot）
 
-把当前 DeepSeek Harness 变成一个 **QQ 机器人通道**：接收 QQ 消息（含图片），
-生成回答，再把回答发回 QQ。
+把 DeepSeek Harness 变成一个 **QQ 机器人通道**：接收文字 / 图片消息，调用模型生成回答，再把回答发回去。
 
-默认 **直接用你在 Harness 里选好的模型**，不需要任何 API 密钥；也可以切到
-外部 OpenAI 兼容端点（此时才需要 key）。
+**「零下载」重构后的定位**：
 
-基于 **OneBot v11** 协议，可用 NapCatQQ、Lagrange.Core、LLOneBot、go-cqhttp 等接入。
-插件完全自包含，只用 Node 内置模块，**不需要额外安装任何 npm 依赖**。
+- 这是一个 **DSH 面板插件**，纯 Node 实现，**零 npm 依赖**、**零下载 / 零安装**——插件不会替你下载、安装或启动任何 QQ 客户端，也**不再自动下载 NapCat**。
+- 启用即用的 **面板「① 直聊测试」**：不装任何东西，直接在面板里发消息，走完整的 BotLogic 收图 → 模型作答 → 记忆 → 分段回复流程。
+- 默认 **`llm.mode='harness'`**：跟随 Harness 里当前选中的模型，**无需任何 API 密钥**；也可切到 `external` 走 OpenAI 兼容端点（此时才需要 key）。
+- 可选的 **连接真实 QQ**：插件可以主动连出到一个「已经装好并正在运行」的 OneBot v11 正向 WebSocket，或接受任意已有 OneBot 实现的反向 WS / HTTP POST 接入。
+- 基于 **OneBot v11** 协议，适配 NapCatQQ、Lagrange.Core、LLOneBot、go-cqhttp 等**已装好**的实现端。
 
 仓库：<https://github.com/luchengfj/qq-bot>
 
-安装：把本目录挂到 Harness 的插件目录，或在 `cordis.patch.yml` 里
-`insert` 一行 `{id: qq-bot, name: '@local/qq-bot'}` 指向本目录。
+安装：把本目录挂到 Harness 的插件目录，或用 `cordis.patch.yml` 的 `insert` 行 `{ id: qq-bot, name: '@local/qq-bot' }` 指向本目录。
 
 ---
 
 ## 工作原理
 
 ```
-QQ 客户端
-  │  (发消息 / 图片)
-  ▼
-NapCat / Lagrange / ... (OneBot v11 实现)
-  │  反向 WebSocket 客户端  →  ws://127.0.0.1:6700/onebot
-  ▼
-本插件 (在 Harness 内运行 HTTP + WebSocket 服务端)
-  │  解析消息段 (CQ 码 / 数组)，提取图片 URL
-  ▼
-模型后端（二选一）
-  ├─ mode: harness → Harness 当前选中的模型（免密钥，图片通过附件服务）
-  └─ mode: external → OpenAI 兼容 /chat/completions（需 apiKey）
-  ▼
-回复通过同一 WebSocket（或 OneBot HTTP API）发回 QQ
+① 面板「直聊测试」（零下载，默认路径）
+   DSH 面板 ──输入文字/图片──▶ 直聊模拟器 ──▶ BotLogic 管线
+        （收图 → 记忆/上下文 → 模型作答 → 分段回复） ──▶ 回到面板展示
+
+② 可选：连接真实 QQ（插件不下载任何东西）
+   已有 OneBot v11 正向 WS 服务  ◀──插件主动连出（forward:）
+   已有 OneBot 实现 ──反向 WS / HTTP POST──▶ ws://127.0.0.1:6700/onebot
+        │
+        ▼
+   BotLogic 管线 ──▶ 通过同一连接（或 OneBot HTTP API）发回 QQ
 ```
+
+模型后端二选一：`mode: harness` → Harness 当前选中模型（免密钥，图片经附件服务）；`mode: external` → OpenAI 兼容 `/chat/completions`（需 apiKey）。
 
 ---
 
-## 1. 配置插件
+## 1. 快速开始（零下载）
 
-### 1.1 免密钥（推荐）
+1. 在 DSH「插件」里**启用** `@local/qq-bot`。改过配置或代码后要**禁用 → 再启用**才会重新加载（本地链接安装的插件不会自动热更新文件）。
+2. 打开侧边栏的「QQ 机器人」面板。
+3. 在「**① 直聊测试**」输入框里直接打一句话（或贴一张图）发送。
 
-默认就是 `mode: harness`：插件通过 Host 的 `llm` 服务调用你在 Harness 里
-**当前选中的模型**，不需要配置任何密钥。选中支持图片输入的模型时，QQ 里的
-图片会作为附件一起发给模型；选中的模型不支持图片时，插件自动改为只回答文字
-并在回复里说明看不了图片——不会整条丢掉。
+**立即可用**：不需要 QQ 客户端、不需要 token、不需要 API key —— 默认走 Harness 原生模型。聊天里同样能用 `/help`、`/status`、`/new`、`/memory`、`/forget`，机器人记住的事实会出现在「④ 记忆与上下文」。
 
-```yaml
-llm:
-  mode: 'harness'   # 免密钥，跟随 Harness 默认模型
-  model: ''         # 留空=跟随 Harness；填了则强制用这个模型
-  provider: ''      # 留空=跟随 Harness；填了则强制用这个 provider
-```
-
-### 1.2 外部 OpenAI 兼容端点
-
-把 `mode` 改成 `external` 并**填写 `apiKey`**：
-
-```yaml
-llm:
-  mode: 'external'
-  baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-  apiKey: 'sk-你的密钥'          # mode: external 时必填
-  model: 'qwen-vl-max-latest'
-```
-
-换成任何 OpenAI 兼容端点都可以，例如：
-
-- **OpenAI**：`baseUrl: 'https://api.openai.com/v1'`，`model: 'gpt-4o-mini'`
-- **DeepSeek**：`baseUrl: 'https://api.deepseek.com'`，`model: 'deepseek-chat'`（纯文本，无视觉）
-- **本地网关**（Ollama / vLLM / LM Studio）：`baseUrl: 'http://127.0.0.1:11434/v1'`，
-  `model: 'llava'` 之类，`apiKey` 可留空（本地无需鉴权时不校验）
-
-其它常用项：
-
-| 配置项 | 说明 | 默认 |
-| --- | --- | --- |
-| `host` / `port` | 监听地址 / 端口 | `0.0.0.0` / `6700` |
-| `path` | WS 与 HTTP POST 路径 | `/onebot` |
-| `accessToken` | 接入令牌（留空不校验） | 空 |
-| `replyVia` | `ws`（默认，原连接回复）/ `http`（走 httpApiBase） | `ws` |
-| `httpApiBase` | 备用 OneBot HTTP API，如 `http://127.0.0.1:3000` | 空 |
-| `replyAtSender` | 群回复是否 @发送者 | `true` |
-| `trigger.privateAlways` | 私聊是否全部响应 | `true` |
-| `trigger.groupRequiresAt` | 群消息是否需 @机器人 | `true` |
-| `trigger.prefix` | 群消息命令前缀，如 `/ai ` | 空 |
-| `allow.groups/users` | 白名单（空=不限制） | 空 |
-| `allow.denyUsers` | 黑名单 | 空 |
-| `maxImageBytes` | 单图下载上限 | 8MB |
-| `llm.mode` | `harness`（免密钥，跟随 Harness 模型）/ `external`（需 apiKey） | `harness` |
-| `llm.provider` / `llm.model` | 强制指定模型；留空=跟随 Harness 当前选择 | 空 |
-| `llm.temperature` | 采样温度（harness 模式生效） | `0.4` |
-| `llm.allowPrivateImages` | 允许下载内网/本机地址的图片（默认拒绝，防 SSRF） | `false` |
-
-改完配置或修改代码后，**必须重新加载插件** 才会生效（本地链接安装的插件不会自动热更新文件）：
-
-- 方式 A：在插件管理里把 `@local/qq-bot` **禁用 → 再启用**（`plugin_manager` 的
-  `set_plugin`，target 为 `include:qq-bot`，先 `enabled:false` 再 `enabled:true`）；
-- 方式 B：**重启 Harness**。
-
-每次禁用插件会关闭监听端口（`/health` 会连接拒绝），重新启用后会用新代码重新监听。
+> 想连真实 QQ 的话看 §3；那是**完全可选**的，且插件依旧不会下载任何东西。
 
 ---
 
-## 2. DSH 内置面板（推荐）
+## 2. 面板的 5 个区块
 
-安装启用插件后，面板直接长在 DSH 里，不用记端口：
-
-- **插件页**：打开「插件」→ 找到 `@local/qq-bot` → 配置页（列表行也会显示一行
-  「QQ 机器人 · 已连接/未连接 · 已登录/未登录」摘要）；
-- **侧边栏**：全局面板区会出现「QQ 机器人」图标，点开即完整面板。
-
-面板每 4 秒自动刷新，按 5 个分组区块组织（概览状态徽标 + 连接与登录 +
-NapCat 运行时 + 测试与诊断 + 记忆 / 配置），响应式两栏、窄屏自动单栏：
+面板每几秒自动刷新，按 5 个分组区块组织（响应式两栏、窄屏自动单栏）：
 
 | 区块 | 内容 |
 | --- | --- |
-| 概览状态徽标 | 连接数、登录 QQ、模型来源（Harness 内置 / 外部端点）、本插件端点、反向 WS 地址、NapCat 地址、消息统计（收到/已回复/失败）、记忆概况 |
-| **连接与登录** | **三步引导：① 安装并启动 NapCat → ② 扫码登录 → ③ 一键接入**；二维码直接在面板里渲染（带倒计时）、刷新二维码 |
-| **NapCat 运行时** | **「下载并安装 NapCat」+「启动 NapCat」两阶段引导**；区分「引导包已下载 / 运行时就绪 / WebUI 在线」，显示安装目录、启动器、运行时目录、进度与错误 —— 不用手动去 GitHub 下载 |
-| **测试与诊断** | **「运行诊断」逐项自检**：OneBot 监听、WebUI 令牌、端口可达、WebUI HTTP、QQ 登录、反向 WS 连接；失败项直接给出可操作的中文提示。另有模型连通性测试、清空统计、实时日志 |
-| 记忆 / 配置 | 查看每个会话记住了什么、删除单条/整个会话/全部记忆、给某个会话「换个话题」清上下文、立即写盘；发送测试消息；当前配置（只读）|
+| **① 直聊测试** | 不装任何东西，立即验证收图、答题、记忆与分段回复；清空当前会话（`chat-clear`）。走的是真实 BotLogic 管线。 |
+| **② 连接真实 QQ（可选）** | 填一个已有 OneBot v11 正向 WS 地址（`forward-config`）/ 断开（`forward-disconnect`），或查看反向 WS 接入地址；连上后可发测试消息（`send`）。 |
+| **③ 运行自检** | 「运行自检」逐项检查 6 项：OneBot 监听、模型后端、反向 WS 连接、正向 WS 连接、面板直聊可用、记忆功能；附模型连通性测试、统计清零、实时日志。 |
+| **④ 记忆与上下文** | 查看每个会话记住了什么、删除单条 / 整个会话 / 全部记忆、给某个会话「换个话题」清上下文、立即写盘、查看最近对话上下文。 |
+| **⑤ 配置与日志** | 当前配置（只读）、完整日志环、日志清空。改配置请编辑 `cordis.patch.yml` 后禁用 → 启用插件。 |
 
-数据来自 Host 侧注册的 `/api/qq-bot/*` 路由（`lib/bridge.js`），只允许
-**本机同源**访问：`sec-fetch-site: cross-site`、Origin 与 Host 不一致、
-非 loopback 的 Host 或远端地址都会被拒绝（403）。
-
-> 面板内的配置是**只读**的：改配置请编辑 `cordis.patch.yml`，然后
-> 禁用 → 启用插件。
+数据来自 Host 侧注册的 `/api/qq-bot/*` 路由（`lib/bridge.js`），只允许**本机同源**访问：`sec-fetch-site: cross-site`、Origin 与 Host 不一致、非 loopback 的 Host 或远端地址都会被拒绝（403）。
 
 ---
 
-## 3. 扫码登录 + 一键接入（独立控制台 /setup）
+## 3. 连接真实 QQ 完全可选，且不下载任何东西
 
-除了上面的 DSH 面板，插件还自带一个独立的控制台页面，**不用手改 NapCat 配置**：
+> **重要前提**：QQ 官方**没有**「免客户端」的 HTTP 机器人 API。所以「完全不装任何 QQ 端」只能做 **面板直聊测试**；要真实收发 QQ 消息，仍然需要一个**已经装好并正在运行**的 OneBot v11 实现端。区别在于：**插件本身不再自动下载 / 安装 / 启动它**，你用自己已有的即可。
 
-1. 先安装并启动 NapCat。**最简单的方式是用上面的 DSH 面板「下载并安装
-   NapCat」按钮** —— 插件会自动从 GitHub 下载 OneKey 引导包并解压，
-   默认装到 `~/.dsh/integrations/dsh-qq/napcat`。
-   > ⚠️ OneKey 压缩包（约 1 MB）只是**引导包**，不是完整运行时。第一次点
-   > 「启动 NapCat」会先运行 `NapCatInstaller.exe` 下载真正的 Shell 运行时
-   > （QQNT + NapCat）并生成 `NapCat.*.Shell/` 目录，可能要几分钟、也可能弹窗；
-   > **完成后再点一次「启动 NapCat」** 才会真正启动并开启 WebUI（6099）。
-   > 注入 QQ 需要管理员权限，若提示权限不足请右键以管理员身份运行启动脚本。
-2. **WebUI 令牌无需手填**：NapCat 首次启动会生成随机 token 并写入
-   `.../resources/app/napcat/config/webui.json`，插件会自动扫描该文件（含
-   `NAPCAT_WEBUI_SECRET_KEY` 环境变量与 `NAPCAT_WEBUI_PREFERRED_PORT`）取到
-   token / 端口。只有想手动指定时才填 `cordis.patch.yml`：
+插件提供三种与已有 OneBot 实现对接的方式，任选其一：
 
-   ```yaml
-   napcat:
-     enabled: true
-     baseUrl: 'http://127.0.0.1:6099'   # 可选，自动发现会覆盖
-     webuiToken: ''                      # 留空 = 自动发现；也可手动填那串 token
-   ```
+- **(A) 正向 WebSocket（插件主动连出）**：在面板「② 连接真实 QQ」里填一个**已经装好并正在运行**的 OneBot v11 正向 WS 地址（`ws://…`，可选 `accessToken`），或写进 `cordis.patch.yml` 的 `forward:` 块。面板填的配置会持久化到 `~/.dsh/qq-bot-forward.json`；`forward:` 块只是首次默认值。填好后用 `forward-config` 立即生效、`forward-disconnect` 断开。
+- **(B) 反向 WebSocket（实现端连回插件）**：把任意已装好的 OneBot 实现的「反向 WebSocket 客户端」地址指向 `ws://127.0.0.1:6700/onebot`（设置了 `accessToken` 时加 `?access_token=你的token` 或 `Authorization: Bearer`）。NapCatQQ / Lagrange.Core / LLOneBot / go-cqhttp 等同理。
+- **(C) HTTP POST 上报**：同一路径 `/onebot` 也接受 OneBot 的 HTTP POST 上报（可用 `secret` 做 HMAC-SHA1 签名）。这种单向连接发回复需要配合 `httpApiBase` 指向 OneBot 的 HTTP API；优先推荐 (A) / (B)。
 
-   若面板「运行诊断」显示令牌未找到，点它给出的提示操作，或临时把 token 填进
-   `webuiToken` 后重新加载插件（禁用 → 启用）。
-3. 浏览器打开 **`http://127.0.0.1:6700/setup`**（或直接用 DSH 面板的「接入」页）；
-4. 点 **「获取二维码」** → 用手机 QQ 扫码登录；页面会轮询登录状态，
-   二维码过期点「刷新二维码」；
-5. **QQ 登录成功后**再点 **「一键接入」** → 插件会把反向 WS 地址写进 NapCat 的
-   `onebot11.json`（`network.websocketClients`），NapCat 随后自动连回来，
-   页面上的「连接状态」变成「OneBot 已连接」。
-   > NapCat v4 的 `OB11Config` 接口要求 QQ 已登录，未登录时点「一键接入」会
-   > 明确提示「QQ 尚未登录，请先扫码」，不会静默失败。
-
-控制台接口（同源，均为 JSON）：
-
-| 接口 | 说明 |
-| --- | --- |
-| `GET /setup` | 控制台页面 |
-| `GET /api/status` | 插件 + NapCat + 模型配置状态 |
-| `POST /api/qr` | 取一个新登录二维码（返回 url 与有效期） |
-| `GET /api/qr.svg` | 当前二维码的 SVG 图 |
-| `POST /api/login-info` | 查询当前登录状态 / QQ 号 |
-| `POST /api/link` | 一键写入 NapCat 反向 WS |
-
-二维码由插件内置的 QR 编码器生成（`lib/qr.js`，纯 Node 实现，无第三方依赖），
-不调用任何外部二维码服务。
-
-若插件设置了 `accessToken`，控制台页面与 `/api/*` 需要带
-`?token=...` 或 `Authorization: Bearer ...`；未设置时只允许本机访问。
-
-> 「一键接入」只新增/更新指向本插件的那一条 WebSocket 客户端配置，不会改动
-> 你已有的 HTTP / 正向 WS 等其他配置；同一地址重复点会更新而不是重复添加。
+连接参数（`host` / `port` / `path` / `accessToken` / `replyVia` / `httpApiBase` 等）见 §4。插件默认监听 `0.0.0.0:6700`，路径 `/onebot`；只在本机用可把 `host` 改成 `127.0.0.1`。
 
 ---
 
-## 4. 手动配置 OneBot 实现端（以 NapCatQQ 为例）
+## 4. 配置表
 
-在 NapCat 的「网络配置」里添加一个 **反向 WebSocket 客户端**：
+改配置请编辑 `cordis.patch.yml`，然后**禁用 → 启用**插件。面板里的配置是只读的（正向 WS 例外，可在面板改并写盘）。
 
-- **URL**：`ws://127.0.0.1:6700/onebot`
-  - 若插件设置了 `accessToken`，改为 `ws://127.0.0.1:6700/onebot?access_token=你的token`
-- **消息上报格式**（`message_post_format`）：`string` 或 `array` 都支持（插件两种都解析）
-- 启用并保存
+### 4.1 `forward:`（可选，连接已有正向 WS）
 
-Lagrange.Core / LLOneBot / go-cqhttp 同理，填反向 WS 地址即可（go-cqhttp 用
-`ws-reverse` 配置段）。确保 OneBot 端与 Harness 在同一台机器，或把 `host` 改成
-`0.0.0.0` 并开放防火墙端口后填实际 IP。
-
-> HTTP POST 方式：插件也接受 OneBot 的 HTTP 上报（POST 到 `/onebot`），但回复这种
-> 模式必须配置 `httpApiBase`（OneBot 的 HTTP API 地址），因为 POST 连接不能反向发消息。
-> 推荐优先用反向 WebSocket。
-
----
-
-## 5. 验证
-
-插件启动后会在日志打印监听地址。可用浏览器或 curl 访问健康检查：
-
-```
-http://127.0.0.1:6700/health
-```
-
-返回示例：
-
-```json
-{
-  "ok": true,
-  "plugin": "@local/qq-bot",
-  "started": true,
-  "connections": 1,
-  "selfIds": ["123456789"],
-  "replyVia": "ws",
-  "path": "/onebot"
-}
-```
-
-`connections: 1` 且 `selfIds` 有值，说明 OneBot 端已连上。之后在 QQ 里：
-
-- **私聊**机器人：直接发文字或图片，机器人会回复
-- **群聊**：需要 `@机器人`（或命中 `trigger.prefix` 前缀）才会响应
-- 发**图片**时，机器人会描述图片并针对内容作答（需要所选模型支持图片输入，
-  否则会说明看不了图片，仅回答文字）
-
-面板接口（DSH 面板用，同源 + 仅本机）：
-
-```bash
-curl http://127.0.0.1:57126/api/qq-bot/status    # 需带浏览器同源头，见「安全提示」
-```
-
-| 路由 | 方法 | 说明 |
+| 配置项 | 说明 | 默认 |
 | --- | --- | --- |
-| `/api/qq-bot/status` | GET | 插件状态、NapCat/模型配置、自动发现的令牌来源、统计、最近日志 |
-| `/api/qq-bot/diagnose` | POST | **连接自检**：逐项检查 OneBot 监听 / WebUI 令牌 / 端口 / WebUI HTTP / QQ 登录 / 反向 WS，返回 `{ok,checks,hints,at}` |
-| `/api/qq-bot/log` | GET | 完整日志环（默认 200 条）|
-| `/api/qq-bot/qr` | POST | 生成登录二维码（令牌缺失时返回 503 + 中文 hints）|
-| `/api/qq-bot/qr.svg` | GET | 当前二维码 SVG |
-| `/api/qq-bot/login-info` | POST | 登录状态 / QQ 号 |
-| `/api/qq-bot/link` | POST | 一键写入 NapCat 反向 WS（QQ 未登录时给出明确提示）|
-| `/api/qq-bot/llm-test` | POST | 测试模型接口连通性 |
-| `/api/qq-bot/send` | POST | 发送测试消息（`{messageType,userId\|groupId,text}`）|
-| `/api/qq-bot/stats-reset` | POST | 清空统计 |
-| `/api/qq-bot/log-clear` | POST | 清空日志 |
-| `/api/qq-bot/memory` | GET | 记忆概况 + 最近会话列表 |
-| `/api/qq-bot/memory-facts` | GET | 某个会话记住的条目（`?key=private:12345`）|
-| `/api/qq-bot/memory-forget` | POST | 删除记忆（`{key,fact}` / `{key}` / `{scope:'all'}`）|
-| `/api/qq-bot/memory-save` | POST | 立即把记忆写入磁盘 |
-| `/api/qq-bot/memory-history` | GET | 某个会话的最近对话上下文（`?key=private:12345`）|
-| `/api/qq-bot/memory-newtopic` | POST | 清空某个会话的对话上下文（`{key}`，长期记忆保留）|
-| `/api/qq-bot/napcat-install` | POST | 后台下载并解压 NapCat OneKey 引导包 |
-| `/api/qq-bot/napcat-launch` | POST | 启动 NapCat（引导包阶段先运行安装器，运行时阶段启动 Shell）|
+| `forward.enabled` | 是否主动连出到正向 WS | `false` |
+| `forward.url` | 已运行的 OneBot v11 正向 WS 地址，如 `ws://127.0.0.1:3001` | 空 |
+| `forward.accessToken` | 正向 WS 鉴权 token（可选） | 空 |
+| `forward.reconnectMs` | 断线重连间隔（毫秒） | `5000` |
 
-共 19 个路由。
+### 4.2 `llm:`（模型）
+
+| 配置项 | 说明 | 默认 |
+| --- | --- | --- |
+| `llm.mode` | `harness`（**默认**：跟随 Harness 当前选中模型，免密钥）/ `external`（OpenAI 兼容端点，需 key） | `harness` |
+| `llm.provider` / `llm.model` / `llm.reasoningEffort` | harness 模式下**留空**即跟随 Harness；填了则强制指定 | 空 |
+| `llm.temperature` | 采样温度（harness 模式生效） | `0.4` |
+| `llm.baseUrl` / `llm.apiKey` / `llm.model` | external 模式才用；默认 DashScope 兼容端点 | 见文件 |
+| `llm.systemPrompt` / `llm.maxTokens` / `llm.timeoutMs` | 提示词 / 单次上限 / 超时 | 见文件 |
+| `llm.maxReplyChars` / `llm.maxReplyParts` | 单条回复最大字数、最多拆几条（0 / 1 = 不拆） | `600` / `4` |
+| `llm.allowPrivateImages` | 允许下载内网 / 本机地址的图片（默认拒绝，防 SSRF） | `false` |
+
+external 端点可换成任何 OpenAI 兼容服务（OpenAI、DeepSeek、本地 Ollama / vLLM 等）。
+
+### 4.3 `memory:`（长期记忆 + 对话上下文）
+
+| 配置项 | 说明 | 默认 |
+| --- | --- | --- |
+| `memory.enabled` | 是否启用记忆 | `true` |
+| `memory.maxFacts` / `maxFactChars` / `maxReplies` | 每会话最多记多少条 / 单条长度 / 去重回复条数 | `60` / `120` / `30` |
+| `memory.maxHistory` / `maxHistoryChars` / `historyTtlMinutes` | 最近多少轮上下文 / 单轮长度 / 静默多久当新话题 | `12` / `300` / `30` |
+| `memory.ttlDays` | 多久没说话就遗忘长期记忆（天） | `30` |
+| `memory.file` | 持久化文件路径；留空 = 仅内存（重启即失效） | 空 |
+| `memory.autoSaveMs` | 有新记忆后延迟写盘（毫秒） | `15000` |
+
+### 4.4 `trigger:` 与 `allow:`
+
+| 配置项 | 说明 | 默认 |
+| --- | --- | --- |
+| `trigger.privateAlways` | 私聊是否全部响应 | `true` |
+| `trigger.groupRequiresAt` | 群消息是否需 @机器人 或前缀 | `true` |
+| `trigger.prefix` | 群消息命令前缀，如 `/ai ` | 空 |
+| `allow.groups` / `allow.users` | 白名单（空 = 不限制） | 空 |
+| `allow.denyUsers` | 黑名单 | 空 |
+
+### 4.5 连接 / 其它
+
+| 配置项 | 说明 | 默认 |
+| --- | --- | --- |
+| `host` / `port` / `path` | 监听地址 / 端口 / WS 与 HTTP POST 路径 | `0.0.0.0` / `6700` / `/onebot` |
+| `accessToken` | 接入令牌（留空不校验） | 空 |
+| `secret` | HTTP POST 上报签名密钥（HMAC-SHA1） | 空 |
+| `replyVia` | `ws`（同连接回复）/ `http`（走 `httpApiBase`） | `ws` |
+| `httpApiBase` / `httpApiToken` | 备用 OneBot HTTP API 地址 / Bearer token | 空 |
+| `replyAtSender` | 群回复是否 @发送者 | `true` |
+| `maxImageBytes` | 单图下载上限 | `8388608`（8MB） |
 
 ---
 
-## 6. 上下文记忆与回复质量
+## 5. 内置指令与长期记忆
 
-### 6.1 长期记忆（记住"你是谁"）
-
-机器人会**自动记住**用户说过的关键信息，之后的对话自然带上这些背景，
-不用每次重新介绍自己：
-
-| 用户说 | 机器人记住 |
-| --- | --- |
-| 我叫小明 | 我叫小明 |
-| 我住在杭州，我喜欢喝咖啡 | 我住在杭州 / 我喜欢喝咖啡 |
-| 以后叫我老王 | 以后叫我老王 |
-
-在 QQ 里直接发：
-
-- **「我的记忆」** → 机器人列出它记住的关于你的信息
-- **「忘记我」** → 清除关于你的全部记忆
-
-规则：
-
-- **私聊与群聊完全隔离**：私聊里说的话不会出现在群里，反之亦然；
-- **同主题覆盖**：再说一次「我叫…」会替换旧的名字，不会堆积；
-- 只记**陈述句**，疑问句（「我叫什么？」）不记；
-- 每条最长 `memory.maxFactChars`（默认 120 字），每人最多 `memory.maxFacts` 条（默认 60）；
-- 超过 `memory.ttlDays`（默认 30 天）没说话会自动遗忘。
-
-**持久化**：默认只在内存里，插件重载就没了。把 `cordis.patch.yml` 的
-`memory.file` 设成一个路径即可写入磁盘：
-
-```yaml
-memory:
-  enabled: true
-  file: 'C:/Users/你的用户名/.dsh/qq-bot-memory.json'
-```
-
-写盘是**合并延迟写**（默认 15 秒），插件卸载时会强制同步一次。
-
-### 6.2 对话上下文（记住"刚才聊了什么"）
-
-长期记忆记的是「你是谁」，对话上下文记的是「刚才说了什么」——两者分开。
-有了它，机器人才能接住指代和追问：
-
-```
-用户：Python 里怎么读文件？
-机器人：用 open()…
-用户：那写呢？            ← 没有上下文就答非所问
-```
-
-规则：
-
-- 每个会话保留最近 `memory.maxHistory` 轮（默认 12），并注入模型；
-- 静默超过 `memory.historyTtlMinutes`（默认 30 分钟）自动清空，当作新话题；
-- 发 **`/new`**（或「换话题」）可立即清空，长期记忆不受影响；
-- 上下文**不会**被当成长期知识，也不写进"我的记忆"。
-
-### 6.3 回复质量
-
-每次模型返回后都会做一遍清洗（`lib/reply.js`，纯本地、不额外调用模型）：
-
-- 去掉「作为一个人工智能助手，」这类开场白；
-- 折叠连续空行；
-- 超过 `llm.maxReplyChars`（默认 600 字）时**自动拆成多条发送**（默认最多
-  `llm.maxReplyParts`=4 条），按段落 → 句子 → 空格的优先级切分并标上
-  `(1/4)`，不再直接截断丢内容；确实放不下的部分会以「…（略）」标注；
-- 记住自己最近说过的话，如果判断在重复，会要求模型换角度重新回答；
-- 模型回复为空时给一个兜底答复，不会静默不回。
-
-### 6.4 内置指令
-
-在 QQ 里直接发（也支持中文别名）：
+在 QQ 里（或面板直聊里）直接发，也支持中文别名；指令只在消息**开头**才生效：
 
 | 指令 | 作用 |
 | --- | --- |
-| `/help`、`/帮助` | 显示这条帮助 |
+| `/help`、`/帮助` | 显示帮助 |
 | `/status`、`/状态` | 查看模型、记忆与上下文的运行状态 |
 | `/new`、`/换话题` | 换个话题，清空对话上下文（长期记忆保留） |
 | `/memory`、`/我的记忆` | 查看机器人记住了什么 |
 | `/forget`、`/忘记我` | 清空关于你的长期记忆 |
 
-指令只在消息**开头**才生效，句子中间提到 `/help` 不会被当成指令。
+### 长期记忆（记住「你是谁」）
+
+机器人会**自动记住**用户说过的关键信息（「我叫小明」「我住在杭州，我喜欢喝咖啡」「以后叫我老王」），之后的对话自然带上这些背景。规则：
+
+- **私聊与群聊完全隔离**；同主题覆盖（再说「我叫…」会替换旧名字，不堆积）；
+- 只记**陈述句**，疑问句不记；每会话最多 `memory.maxFacts` 条、单条最长 `maxFactChars` 字；
+- 超过 `memory.ttlDays`（默认 30 天）没说话自动遗忘；
+- 默认只在内存里，设 `memory.file` 后写盘（合并延迟写，插件卸载时强制同步一次）。
+
+### 对话上下文（记住「刚才聊了什么」）
+
+与长期记忆分开：保留最近 `memory.maxHistory` 轮真实问答并注入模型，让机器人接住「那它呢？」这类指代；静默超过 `historyTtlMinutes` 自动清空，发 `/new` 可立即清空，长期记忆不受影响。上下文**不会**被当成长期知识。
+
+### 回复质量
+
+每次模型返回后做本地清洗（`lib/reply.js`，不额外调用模型）：去开场白、折叠空行；超过 `maxReplyChars` 时按段落 → 句子 → 空格拆成多条并标 `(1/4)`，不再直接截断；记住自己最近说过的话，重复时要求换角度；模型回复为空时给兜底答复。
 
 ---
 
-## 7. 触发逻辑小结
+## 6. 面板接口（/api/qq-bot/*）
 
-- 只处理 `post_type === 'message'` 且 `message_type` 为 `private`/`group` 的事件
-- 按 `message_id` 去重，避免重复回复
-- 群消息默认需 `@机器人` 或前缀；私聊默认全回
-- 以 `/` 开头的消息先走内置指令（`/help`、`/status`、`/new`、`/memory`、`/forget`）
-- 支持白名单 / 黑名单（缺少 `user_id`/`group_id` 的事件在启用白名单时会被拒绝）
-- 图片从 `[CQ:image,url=...]` 或数组段的 `image` 中提取并下载（带大小限制）
-- 视觉接口失败时，会把简短错误信息回复到聊天，不会让插件崩溃
+全部经 `ctx.webServer` 注册、仅本机同源可访问。面板共 **17 个 `/api/qq-bot/*` 路由**；加上插件自身 HTTP 服务上的 `/health` 健康检查，后端合计 **18 个接口**。**读接口用 GET，写接口用 POST**，别用错方法导致 405。
+
+| 路由 | 方法 | 用途 |
+| --- | --- | --- |
+| `/api/qq-bot/status` | GET | 插件状态、监听端点、连接模式、正向 WS 信息、模型来源、统计、最近日志、直聊历史、记忆概况 |
+| `/api/qq-bot/diagnose` | POST | **运行自检**：6 项检查（OneBot 监听 / 模型后端 / 反向 WS / 正向 WS / 面板直聊 / 记忆），返回 `{ok,checks,hints,at}` |
+| `/api/qq-bot/log` | GET | 完整日志环（默认 200 条） |
+| `/api/qq-bot/chat` | POST | **面板直聊**：发一条消息走完整 BotLogic 管线（`{text,image}`），返回回复与历史 |
+| `/api/qq-bot/chat-clear` | POST | 清空直聊会话历史 |
+| `/api/qq-bot/forward-config` | POST | 设置 / 更新正向 WS 地址并连接（持久化到 `~/.dsh/qq-bot-forward.json`） |
+| `/api/qq-bot/forward-disconnect` | POST | 断开正向 WS 连接 |
+| `/api/qq-bot/llm-test` | POST | 测试当前模型后端连通性 |
+| `/api/qq-bot/send` | POST | 经真实连接发送测试消息（`{messageType,userId\|groupId,text}`） |
+| `/api/qq-bot/stats-reset` | POST | 清空消息统计 |
+| `/api/qq-bot/log-clear` | POST | 清空日志 |
+| `/api/qq-bot/memory` | GET | 记忆概况 + 最近会话列表 |
+| `/api/qq-bot/memory-facts` | GET | 某会话记住的条目（`?key=private:12345`） |
+| `/api/qq-bot/memory-history` | GET | 某会话最近对话上下文（`?key=private:12345`） |
+| `/api/qq-bot/memory-forget` | POST | 删除记忆（`{key,fact}` / `{key}` / `{scope:'all'}`） |
+| `/api/qq-bot/memory-save` | POST | 立即把记忆写入磁盘 |
+| `/api/qq-bot/memory-newtopic` | POST | 清空某会话的对话上下文（`{key}`，长期记忆保留） |
+
+> GET 读接口：`status` / `log` / `memory` / `memory-facts` / `memory-history`；其余均为 POST 写接口。
+
+---
+
+## 7. 验证与排错
+
+- **健康检查**：插件启动后在日志打印监听地址，浏览器 / curl 访问 `http://127.0.0.1:6700/health`，返回 `{ok,plugin,started,connections,selfIds,replyVia,path}`。`started:true` 即监听正常；`connections` / `selfIds` 有值表示已有 OneBot 端连回。
+- **运行自检**：面板「③ 运行自检」的「运行自检」按钮跑 6 项检查，只检查插件自己能控制的东西（不再探测任何外部客户端的登录状态），失败项给出中文提示。当前没连真实 QQ 时会提示「独立测试模式：直接在面板 ① 直聊测试发消息即可」。
+- **不需要 token / key**：默认 `llm.mode='harness'` 跟随 Harness 模型，直聊测试无需任何令牌；`accessToken` 留空即不校验。
+- **别被 405 绕晕**：读接口是 **GET**（`status` / `log` / `memory` / `memory-facts` / `memory-history`），写接口是 **POST**（`diagnose` / `chat` / `chat-clear` / `forward-config` / `forward-disconnect` / `llm-test` / `send` / `stats-reset` / `log-clear` / `memory-forget` / `memory-save` / `memory-newtopic`）。方法用错会返回 405。
+- **改配置不生效**：编辑 `cordis.patch.yml` 后必须**禁用 → 启用**插件（或重启 Harness）；禁用会关闭监听端口，重新启用后用新配置重新监听。
+- **面板接口 403**：`/api/qq-bot/*` 只接受本机同源请求，跨站 / Origin 与 Host 不一致 / 非 loopback 会被拒绝。
 
 ---
 
 ## 安全提示
 
-- 默认监听 `0.0.0.0`。若只在本地使用，建议把 `host` 改为 `127.0.0.1`，
-  或设置 `accessToken` 防止他人接入。
+- 默认监听 `0.0.0.0`。只在本地使用建议把 `host` 改为 `127.0.0.1`，或设置 `accessToken` 防止他人接入。
 - API Key 只写在本地插件配置里，不会外传。
 - 图片下载有 8MB 上限与超时保护。
-- **SSRF 防护**：图片地址来自聊天内容，插件默认只下载公网 `http(s)` 图片，
-  会先解析域名并逐跳校验，拒绝 `127.0.0.0/8`、`10/8`、`172.16/12`、`192.168/16`、
-  `169.254/16`（云元数据）、IPv6 本地地址与 IPv4-mapped 写法；跳转后的地址会
-  重新校验，防止公网域名把请求引回内网。若你的图片确实来自局域网图床，
-  把 `llm.allowPrivateImages` 设为 `true` 才会放行。
+- **SSRF 防护**：默认只下载公网 `http(s)` 图片，逐跳校验并拒绝 `127.0.0.0/8`、`10/8`、`172.16/12`、`192.168/16`、`169.254/16`（云元数据）、IPv6 本地地址与 IPv4-mapped 写法；跳转后重新校验。确需局域网图床才把 `llm.allowPrivateImages` 设为 `true`。
 - `file://` 图片引用一律忽略（插件是服务端，不读取本机任意文件）。
-- `/setup` 控制台在未设置 `accessToken` 时只允许本机访问。
-- **面板接口** `/api/qq-bot/*` 同样只接受本机同源请求：拒绝
-  `sec-fetch-site: cross-site`、Origin 与 Host 不一致的跨站调用，
-  非 loopback 的 Host 头，以及非 loopback 的 TCP 对端地址。
+- 面板接口 `/api/qq-bot/*` 只接受本机同源请求：拒绝 `sec-fetch-site: cross-site`、Origin 与 Host 不一致的跨站调用、非 loopback 的 Host 头与非 loopback 的 TCP 对端地址。
